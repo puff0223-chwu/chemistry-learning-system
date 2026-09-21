@@ -55,7 +55,7 @@ function RotatedPanel({ rotate, children }) {
 function PlayerPanel({ label, question, onAnswer, locked, resolved, feedback }) {
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-[80vh]">
-      <h2 className="text-xl font-bold text-cyan">{label}</h2>
+      <h2 className="text-xl font-bold text-cyan-dark">{label}</h2>
       {question ? (
         <>
           <p className="text-lg font-bold text-center leading-snug">{question.content}</p>
@@ -69,9 +69,9 @@ function PlayerPanel({ label, question, onAnswer, locked, resolved, feedback }) 
                   type="button"
                   disabled={locked || resolved}
                   onClick={() => onAnswer(letter)}
-                  className="text-left bg-navy-light hover:bg-cyan/20 disabled:opacity-40 border border-white/20 rounded-lg px-4 py-3 text-base transition-colors"
+                  className="text-left bg-white hover:bg-cyan-50 disabled:opacity-40 border border-slate-200 rounded-lg px-4 py-3 text-base transition-colors"
                 >
-                  <span className="font-bold text-cyan mr-2">{letter}.</span>
+                  <span className="font-bold text-cyan-dark mr-2">{letter}.</span>
                   {text}
                 </button>
               )
@@ -79,8 +79,8 @@ function PlayerPanel({ label, question, onAnswer, locked, resolved, feedback }) 
           </div>
           {feedback && (
             <div
-              className={`w-full text-center rounded-lg px-3 py-2 font-bold ${
-                feedback.type === 'good' ? 'bg-green-500/90' : 'bg-orange-500/90'
+              className={`w-full text-center text-white rounded-lg px-3 py-2 font-bold ${
+                feedback.type === 'good' ? 'bg-green-500' : 'bg-orange-500'
               }`}
             >
               {feedback.text}
@@ -88,7 +88,7 @@ function PlayerPanel({ label, question, onAnswer, locked, resolved, feedback }) 
           )}
         </>
       ) : (
-        <p className="text-white/60">沒有可用的 PK 題目</p>
+        <p className="text-slate-500">沒有可用的 PK 題目</p>
       )}
     </div>
   )
@@ -225,12 +225,11 @@ export default function BattlePlay() {
     setFeedbackB(null)
     setTimeLeft(QUESTION_SECONDS)
     setGameEnded(false)
-    setEndReason(null)
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-navy text-white flex items-center justify-center text-xl">
+      <div className="min-h-screen bg-paper text-navy flex items-center justify-center text-xl">
         載入題目中...
       </div>
     )
@@ -238,7 +237,7 @@ export default function BattlePlay() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-navy text-white flex items-center justify-center text-red-400 text-xl">
+      <div className="min-h-screen bg-paper text-navy flex items-center justify-center text-red-600 text-xl">
         載入失敗：{error}
       </div>
     )
@@ -246,12 +245,12 @@ export default function BattlePlay() {
 
   if (questions.length === 0) {
     return (
-      <div className="min-h-screen bg-navy text-white flex flex-col items-center justify-center gap-4">
-        <p className="text-xl">這個主題還沒有 PK 選擇題。</p>
+      <div className="min-h-screen bg-paper text-navy flex flex-col items-center justify-center gap-4">
+        <p className="text-xl text-slate-600">這個主題還沒有 PK 選擇題。</p>
         <button
           type="button"
           onClick={() => navigate('/battle')}
-          className="bg-cyan hover:bg-cyan-dark rounded-xl px-6 py-3 font-bold"
+          className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 font-bold"
         >
           返回主題選擇
         </button>
@@ -262,7 +261,7 @@ export default function BattlePlay() {
   if (gameEnded) {
     const winner = heartsA === heartsB ? null : heartsA > heartsB ? 'A' : 'B'
     return (
-      <div className="min-h-screen bg-navy text-white flex flex-col items-center justify-center gap-6 text-center px-6">
+      <div className="min-h-screen bg-paper text-navy flex flex-col items-center justify-center gap-6 text-center px-6">
         <h1 className="text-4xl font-extrabold">
           {winner ? `🏆 Player ${winner} 獲勝！` : '⚖️ 平手！'}
         </h1>
@@ -274,14 +273,14 @@ export default function BattlePlay() {
           <button
             type="button"
             onClick={restartGame}
-            className="bg-cyan hover:bg-cyan-dark rounded-xl px-6 py-3 font-bold"
+            className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 font-bold"
           >
             再來一局
           </button>
           <button
             type="button"
             onClick={() => navigate('/battle')}
-            className="bg-white/10 hover:bg-white/20 border border-white/30 rounded-xl px-6 py-3 font-bold"
+            className="bg-white hover:bg-slate-100 border border-slate-300 rounded-xl px-6 py-3 font-bold"
           >
             返回主題選擇
           </button>
@@ -291,7 +290,7 @@ export default function BattlePlay() {
   }
 
   return (
-    <div className="h-screen w-screen bg-navy text-white flex overflow-hidden fixed inset-0">
+    <div className="h-screen w-screen bg-paper text-navy flex overflow-hidden fixed inset-0">
       <RotatedPanel rotate={90}>
         <PlayerPanel
           label="Player A"
@@ -304,7 +303,7 @@ export default function BattlePlay() {
       </RotatedPanel>
 
       <div className="flex flex-col items-center justify-between py-4 gap-3" style={{ width: '84px', flexShrink: 0 }}>
-        <div className={`text-lg font-extrabold ${timeLeft <= 30 ? 'text-red-500' : 'text-white'}`}>
+        <div className={`text-lg font-extrabold ${timeLeft <= 30 ? 'text-red-500' : 'text-navy'}`}>
           {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
         </div>
         <HeartDisplay hearts={heartsA} label="A" />
@@ -312,7 +311,7 @@ export default function BattlePlay() {
         <button
           type="button"
           onClick={nextQuestion}
-          className="bg-cyan hover:bg-cyan-dark rounded-lg px-2 py-3 text-xs font-bold writing-vertical"
+          className="bg-cyan hover:bg-cyan-dark text-white rounded-lg px-2 py-3 text-xs font-bold writing-vertical"
           style={{ writingMode: 'vertical-rl' }}
         >
           ▶ 下一題
@@ -320,7 +319,7 @@ export default function BattlePlay() {
         <button
           type="button"
           onClick={() => endGame()}
-          className="bg-white/10 hover:bg-white/20 border border-white/30 rounded-lg px-2 py-3 text-xs"
+          className="bg-white hover:bg-slate-100 border border-slate-300 rounded-lg px-2 py-3 text-xs"
           style={{ writingMode: 'vertical-rl' }}
         >
           🏳 結束比賽

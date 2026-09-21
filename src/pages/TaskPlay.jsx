@@ -96,7 +96,7 @@ export default function TaskPlay() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex-1 flex items-center justify-center text-xl">載入題目中...</div>
+        <div className="flex-1 flex items-center justify-center text-xl text-slate-600">載入題目中...</div>
       </Layout>
     )
   }
@@ -104,7 +104,7 @@ export default function TaskPlay() {
   if (error) {
     return (
       <Layout>
-        <div className="flex-1 flex items-center justify-center text-red-400 text-xl">
+        <div className="flex-1 flex items-center justify-center text-red-600 text-xl">
           載入失敗：{error}
         </div>
       </Layout>
@@ -115,11 +115,11 @@ export default function TaskPlay() {
     return (
       <Layout>
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
-          <p className="text-xl">這個主題還沒有任務題目。</p>
+          <p className="text-xl text-slate-600">這個主題還沒有任務題目。</p>
           <button
             type="button"
             onClick={() => navigate('/task')}
-            className="bg-cyan hover:bg-cyan-dark rounded-xl px-6 py-3 font-bold"
+            className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 font-bold"
           >
             返回主題選擇
           </button>
@@ -133,11 +133,11 @@ export default function TaskPlay() {
       <Layout>
         <div className="flex-1 flex flex-col items-center justify-center gap-6 text-center px-6">
           <h1 className="text-4xl font-extrabold">🎉 通關成功！</h1>
-          <p className="text-lg text-white/80">你已完成「{topic?.name}」的所有任務題目</p>
+          <p className="text-lg text-slate-600">你已完成「{topic?.name}」的所有任務題目</p>
           <button
             type="button"
             onClick={() => navigate('/task')}
-            className="bg-cyan hover:bg-cyan-dark rounded-xl px-8 py-4 text-xl font-bold"
+            className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-8 py-4 text-xl font-bold"
           >
             返回主題選擇
           </button>
@@ -150,10 +150,10 @@ export default function TaskPlay() {
     <Layout>
       <div className="flex-1 px-4 md:px-8 py-8 max-w-2xl mx-auto w-full flex flex-col gap-6">
         <div>
-          <div className="flex justify-between text-sm text-white/60 mb-1">
+          <div className="flex justify-between text-sm text-slate-500 mb-1">
             <span>第 {index + 1} 題 / 共 {questions.length} 題</span>
           </div>
-          <div className="w-full bg-white/10 rounded-full h-2">
+          <div className="w-full bg-slate-200 rounded-full h-2">
             <div
               className="bg-cyan h-2 rounded-full transition-all"
               style={{ width: `${((index + 1) / questions.length) * 100}%` }}
@@ -162,17 +162,17 @@ export default function TaskPlay() {
         </div>
 
         {topic && (topic.story_context || topic.character_intro) && (
-          <div className="bg-navy-light border border-cyan/30 rounded-2xl p-5 shadow-lg">
+          <div className="bg-cyan-50 border border-cyan/30 rounded-2xl p-5 shadow-md">
             {topic.character_intro && (
-              <p className="text-cyan font-bold mb-2">{topic.character_intro}</p>
+              <p className="text-cyan-dark font-bold mb-2">{topic.character_intro}</p>
             )}
             {topic.story_context && (
-              <p className="text-white/90 leading-relaxed">{topic.story_context}</p>
+              <p className="text-slate-700 leading-relaxed">{topic.story_context}</p>
             )}
           </div>
         )}
 
-        <div className="bg-white/5 rounded-2xl p-6 shadow-lg">
+        <div className="bg-white rounded-2xl p-6 shadow-md">
           <p className="text-xl font-bold mb-6">{current.content}</p>
 
           {status === 'answering' && current.type === 'choice' && (
@@ -185,7 +185,7 @@ export default function TaskPlay() {
                     key={letter}
                     type="button"
                     onClick={() => handleChoiceAnswer(letter)}
-                    className="text-left bg-navy-light hover:bg-cyan/20 border border-white/20 rounded-xl px-5 py-4 text-lg transition-colors"
+                    className="text-left bg-white hover:bg-cyan-50 border border-slate-200 rounded-xl px-5 py-4 text-lg transition-colors"
                   >
                     <span className="font-bold text-cyan mr-2">{letter}.</span>
                     {text}
@@ -201,13 +201,13 @@ export default function TaskPlay() {
                 type="text"
                 value={fillValue}
                 onChange={(e) => setFillValue(e.target.value)}
-                className="bg-navy-light border border-white/20 rounded-xl px-5 py-4 text-lg text-white outline-none focus:border-cyan"
+                className="bg-white border border-slate-300 rounded-xl px-5 py-4 text-lg text-navy outline-none focus:border-cyan"
                 placeholder="請輸入答案"
                 autoFocus
               />
               <button
                 type="submit"
-                className="bg-cyan hover:bg-cyan-dark rounded-xl px-6 py-3 text-lg font-bold self-start"
+                className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 text-lg font-bold self-start"
               >
                 送出答案
               </button>
@@ -216,7 +216,7 @@ export default function TaskPlay() {
 
           {status === 'answering' && wrongCount > 0 && (
             <div className="mt-5 flex flex-col gap-3">
-              <div className="bg-orange-500/90 rounded-xl p-4 text-lg font-bold">
+              <div className="bg-orange-500 text-white rounded-xl p-4 text-lg font-bold">
                 答錯了，再試一次！
               </div>
               <HintBox text={hintText} />
@@ -224,7 +224,7 @@ export default function TaskPlay() {
                 <button
                   type="button"
                   onClick={handleGiveUp}
-                  className="self-start bg-white/10 hover:bg-white/20 border border-white/30 rounded-xl px-5 py-3 text-base"
+                  className="self-start bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl px-5 py-3 text-base"
                 >
                   我真的不會 😭
                 </button>
@@ -234,13 +234,13 @@ export default function TaskPlay() {
 
           {status === 'correct' && (
             <div className="mt-5 flex flex-col gap-4">
-              <div className="bg-green-500/90 rounded-xl p-4 text-lg font-bold">
+              <div className="bg-green-500 text-white rounded-xl p-4 text-lg font-bold">
                 答對了！🎉
               </div>
               <button
                 type="button"
                 onClick={resetForNextQuestion}
-                className="self-start bg-cyan hover:bg-cyan-dark rounded-xl px-6 py-3 text-lg font-bold"
+                className="self-start bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 text-lg font-bold"
               >
                 繼續下一題
               </button>
@@ -253,7 +253,7 @@ export default function TaskPlay() {
               <button
                 type="button"
                 onClick={resetForNextQuestion}
-                className="self-start bg-cyan hover:bg-cyan-dark rounded-xl px-6 py-3 text-lg font-bold"
+                className="self-start bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 text-lg font-bold"
               >
                 繼續下一題
               </button>

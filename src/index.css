@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@config "../tailwind.config.js";
 
 html, body, #root {
   height: 100%;
@@ -7,8 +8,8 @@ html, body, #root {
 body {
   margin: 0;
   font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', Roboto, sans-serif;
-  background-color: #1e3a5f;
-  color: #ffffff;
+  background-color: #eef5fb;
+  color: #1e3a5f;
 }
 
 * {

@@ -13,6 +13,7 @@ export default {
           DEFAULT: '#00b4d8',
           dark: '#0090ad',
         },
+        paper: '#eef5fb',
       },
     },
   },

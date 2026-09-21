@@ -29,29 +29,29 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-navy text-white flex items-center justify-center px-6">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm bg-navy-light rounded-2xl p-8 shadow-xl flex flex-col gap-5">
+    <div className="min-h-screen bg-paper text-navy flex items-center justify-center px-6">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-8 shadow-lg flex flex-col gap-5">
         <h1 className="text-2xl font-bold text-center">🔐 老師後台登入</h1>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="請輸入密碼"
-          className="bg-navy border border-white/20 rounded-xl px-4 py-3 text-lg outline-none focus:border-cyan"
+          className="bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-lg text-navy outline-none focus:border-cyan"
           autoFocus
         />
-        {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+        {error && <p className="text-red-600 text-sm text-center">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="bg-cyan hover:bg-cyan-dark disabled:opacity-50 rounded-xl px-4 py-3 text-lg font-bold"
+          className="bg-cyan hover:bg-cyan-dark text-white disabled:opacity-50 rounded-xl px-4 py-3 text-lg font-bold"
         >
           {loading ? '登入中...' : '登入'}
         </button>
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="text-white/50 hover:text-white text-sm"
+          className="text-slate-500 hover:text-navy text-sm"
         >
           返回首頁
         </button>

@@ -33,16 +33,16 @@ export default function TaskSelect() {
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="text-white/60 hover:text-white mb-6"
+          className="text-slate-500 hover:text-navy mb-6"
         >
           ← 返回首頁
         </button>
         <h1 className="text-3xl font-bold mb-8 text-center">🗺️ 選擇任務主題</h1>
 
-        {loading && <p className="text-center text-white/60">載入中...</p>}
-        {error && <p className="text-center text-red-400">載入失敗：{error}</p>}
+        {loading && <p className="text-center text-slate-500">載入中...</p>}
+        {error && <p className="text-center text-red-600">載入失敗：{error}</p>}
         {!loading && !error && topics.length === 0 && (
-          <p className="text-center text-white/60">目前尚無主題，請聯絡老師新增。</p>
+          <p className="text-center text-slate-500">目前尚無主題，請聯絡老師新增。</p>
         )}
 
         <div className="flex flex-col gap-4">

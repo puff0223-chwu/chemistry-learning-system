@@ -18,7 +18,7 @@ export default function RequireAdmin({ children }) {
 
   if (status === 'checking') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-navy text-white text-xl">
+      <div className="min-h-screen flex items-center justify-center bg-paper text-navy text-xl">
         驗證登入狀態中...
       </div>
     )
