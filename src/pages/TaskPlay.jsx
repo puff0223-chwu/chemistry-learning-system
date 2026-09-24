@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import Layout from '../components/Layout.jsx'
-import HintBox, { ExplanationBox } from '../components/HintBox.jsx'
+import PageBackground from '../components/PageBackground.jsx'
 import { supabase } from '../lib/supabase.js'
 
 function normalize(str) {
@@ -75,7 +74,6 @@ export default function TaskPlay() {
       setStatus('correct')
     } else {
       setWrongCount((c) => c + 1)
-      setSelected(null)
     }
   }
 
@@ -95,99 +93,118 @@ export default function TaskPlay() {
 
   if (loading) {
     return (
-      <Layout>
-        <div className="flex-1 flex items-center justify-center text-xl text-slate-600">載入題目中...</div>
-      </Layout>
+      <PageBackground image="/bg-task.jpg.png">
+        <div className="flex-1 flex items-center justify-center text-xl text-white">載入題目中...</div>
+      </PageBackground>
     )
   }
 
   if (error) {
     return (
-      <Layout>
-        <div className="flex-1 flex items-center justify-center text-red-600 text-xl">
-          載入失敗：{error}
-        </div>
-      </Layout>
+      <PageBackground image="/bg-task.jpg.png">
+        <div className="flex-1 flex items-center justify-center text-badglow text-xl">載入失敗：{error}</div>
+      </PageBackground>
     )
   }
 
   if (questions.length === 0) {
     return (
-      <Layout>
+      <PageBackground image="/bg-task.jpg.png">
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
-          <p className="text-xl text-slate-600">這個主題還沒有任務題目。</p>
+          <p className="text-xl text-white">這個主題還沒有任務題目。</p>
           <button
             type="button"
             onClick={() => navigate('/task')}
-            className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 font-bold"
+            className="bg-glow text-ink rounded-xl px-6 py-3 font-bold"
           >
             返回主題選擇
           </button>
         </div>
-      </Layout>
+      </PageBackground>
     )
   }
 
   if (isFinished) {
     return (
-      <Layout>
+      <PageBackground image="/bg-task.jpg.png">
         <div className="flex-1 flex flex-col items-center justify-center gap-6 text-center px-6">
-          <h1 className="text-4xl font-extrabold">🎉 通關成功！</h1>
-          <p className="text-lg text-slate-600">你已完成「{topic?.name}」的所有任務題目</p>
+          <h1 className="text-4xl font-extrabold text-white">🎉 通關成功！</h1>
+          <p className="text-lg text-sub">你已完成「{topic?.name}」的所有任務題目</p>
           <button
             type="button"
             onClick={() => navigate('/task')}
-            className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-8 py-4 text-xl font-bold"
+            className="bg-glow text-ink rounded-xl px-8 py-4 text-xl font-bold"
           >
             返回主題選擇
           </button>
         </div>
-      </Layout>
+      </PageBackground>
     )
   }
 
   return (
-    <Layout>
+    <PageBackground image="/bg-task.jpg.png">
       <div className="flex-1 px-4 md:px-8 py-8 max-w-2xl mx-auto w-full flex flex-col gap-6">
-        <div>
-          <div className="flex justify-between text-sm text-slate-500 mb-1">
-            <span>第 {index + 1} 題 / 共 {questions.length} 題</span>
+        <div className="flex items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => navigate('/task')}
+            className="text-white/70 hover:text-white text-sm border border-white/30 rounded-full px-4 py-2 shrink-0 transition-colors"
+          >
+            ← 返回
+          </button>
+          <div className="flex-1">
+            <div className="flex justify-between text-sm text-sub mb-1">
+              <span>第 {index + 1} 題 / 共 {questions.length} 題</span>
+            </div>
+            <div className="w-full bg-white/10 rounded-full h-2">
+              <div
+                className="bg-glow h-2 rounded-full transition-all"
+                style={{ width: `${((index + 1) / questions.length) * 100}%` }}
+              />
+            </div>
           </div>
-          <div className="w-full bg-slate-200 rounded-full h-2">
-            <div
-              className="bg-cyan h-2 rounded-full transition-all"
-              style={{ width: `${((index + 1) / questions.length) * 100}%` }}
-            />
-          </div>
+          <span className="text-white text-sm font-bold shrink-0 hidden md:block">{topic?.name}</span>
         </div>
 
         {topic && (topic.story_context || topic.character_intro) && (
-          <div className="bg-cyan-50 border border-cyan/30 rounded-2xl p-5 shadow-md">
-            {topic.character_intro && (
-              <p className="text-cyan-dark font-bold mb-2">{topic.character_intro}</p>
-            )}
-            {topic.story_context && (
-              <p className="text-slate-700 leading-relaxed">{topic.story_context}</p>
-            )}
+          <div className="glass-card rounded-2xl p-5" style={{ borderLeft: '4px solid #00D4FF' }}>
+            <p className="text-xs font-bold text-glow mb-2">📋 案件情境</p>
+            {topic.character_intro && <p className="text-white font-bold mb-2">{topic.character_intro}</p>}
+            {topic.story_context && <p className="text-sub leading-relaxed">{topic.story_context}</p>}
           </div>
         )}
 
-        <div className="bg-white rounded-2xl p-6 shadow-md">
-          <p className="text-xl font-bold mb-6">{current.content}</p>
+        <div className="glass-card rounded-2xl p-6">
+          <p className="text-xs font-bold text-glow mb-2">❓ 題目</p>
+          <p className="text-xl font-bold text-white mb-6">{current.content}</p>
 
-          {status === 'answering' && current.type === 'choice' && (
+          {status !== 'gaveUp' && current.type === 'choice' && (
             <div className="grid grid-cols-1 gap-3">
               {['A', 'B', 'C', 'D'].map((letter) => {
                 const text = current[`option_${letter.toLowerCase()}`]
                 if (!text) return null
+                const isCorrectPick = status === 'correct' && selected === letter
+                const isWrongPick = status === 'answering' && selected === letter && wrongCount > 0
+                let stateClasses = 'glass-card glow-hover text-white'
+                let stateStyle = {}
+                if (isCorrectPick) {
+                  stateClasses = 'text-white'
+                  stateStyle = { background: 'rgba(0, 230, 118, 0.25)', border: '1px solid #00E676' }
+                } else if (isWrongPick) {
+                  stateClasses = 'text-white'
+                  stateStyle = { background: 'rgba(255, 82, 82, 0.25)', border: '1px solid #FF5252' }
+                }
                 return (
                   <button
                     key={letter}
                     type="button"
+                    disabled={status !== 'answering'}
                     onClick={() => handleChoiceAnswer(letter)}
-                    className="text-left bg-white hover:bg-cyan-50 border border-slate-200 rounded-xl px-5 py-4 text-lg transition-colors"
+                    className={`text-left rounded-xl px-5 py-4 text-lg transition-colors ${stateClasses}`}
+                    style={stateStyle}
                   >
-                    <span className="font-bold text-cyan mr-2">{letter}.</span>
+                    <span className="font-bold text-glow mr-2">{letter}.</span>
                     {text}
                   </button>
                 )
@@ -201,13 +218,13 @@ export default function TaskPlay() {
                 type="text"
                 value={fillValue}
                 onChange={(e) => setFillValue(e.target.value)}
-                className="bg-white border border-slate-300 rounded-xl px-5 py-4 text-lg text-navy outline-none focus:border-cyan"
+                className="glass-input rounded-xl px-5 py-4 text-lg outline-none focus:border-glow"
                 placeholder="請輸入答案"
                 autoFocus
               />
               <button
                 type="submit"
-                className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 text-lg font-bold self-start"
+                className="bg-glow text-ink rounded-xl px-6 py-3 text-lg font-bold self-start"
               >
                 送出答案
               </button>
@@ -216,15 +233,31 @@ export default function TaskPlay() {
 
           {status === 'answering' && wrongCount > 0 && (
             <div className="mt-5 flex flex-col gap-3">
-              <div className="bg-orange-500 text-white rounded-xl p-4 text-lg font-bold">
-                答錯了，再試一次！
-              </div>
-              <HintBox text={hintText} />
+              {current.type === 'fill' && (
+                <div
+                  className="rounded-xl p-4 text-lg font-bold text-white"
+                  style={{ background: 'rgba(255, 82, 82, 0.25)', border: '1px solid #FF5252' }}
+                >
+                  答錯了，再試一次！
+                </div>
+              )}
+              {hintText && (
+                <div
+                  className="rounded-xl p-4 flex items-start gap-3"
+                  style={{ background: 'rgba(255, 184, 0, 0.18)', border: '1px solid rgba(255, 184, 0, 0.5)' }}
+                >
+                  <span className="text-2xl leading-none">💡</span>
+                  <div>
+                    <p className="text-xs font-bold text-warnglow mb-1">提示</p>
+                    <p className="text-white leading-relaxed">{hintText}</p>
+                  </div>
+                </div>
+              )}
               {wrongCount >= 3 && (
                 <button
                   type="button"
                   onClick={handleGiveUp}
-                  className="self-start bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl px-5 py-3 text-base"
+                  className="self-start text-white/60 hover:text-white/90 text-sm underline"
                 >
                   我真的不會 😭
                 </button>
@@ -234,13 +267,16 @@ export default function TaskPlay() {
 
           {status === 'correct' && (
             <div className="mt-5 flex flex-col gap-4">
-              <div className="bg-green-500 text-white rounded-xl p-4 text-lg font-bold">
+              <div
+                className="rounded-xl p-4 text-lg font-bold text-white"
+                style={{ background: 'rgba(0, 230, 118, 0.2)', border: '1px solid #00E676' }}
+              >
                 答對了！🎉
               </div>
               <button
                 type="button"
                 onClick={resetForNextQuestion}
-                className="self-start bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 text-lg font-bold"
+                className="self-start bg-glow text-ink rounded-xl px-6 py-3 text-lg font-bold"
               >
                 繼續下一題
               </button>
@@ -249,11 +285,20 @@ export default function TaskPlay() {
 
           {status === 'gaveUp' && (
             <div className="mt-5 flex flex-col gap-4">
-              <ExplanationBox text={current.explanation} answer={current.answer} />
+              <div
+                className="rounded-xl p-4 flex items-start gap-3"
+                style={{ background: 'rgba(30, 58, 95, 0.6)', border: '1px solid rgba(184, 201, 224, 0.4)' }}
+              >
+                <span className="text-2xl leading-none">📖</span>
+                <div className="text-white leading-relaxed">
+                  <p className="font-bold mb-1">正確答案：{current.answer}</p>
+                  {current.explanation && <p>{current.explanation}</p>}
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={resetForNextQuestion}
-                className="self-start bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 text-lg font-bold"
+                className="self-start bg-glow text-ink rounded-xl px-6 py-3 text-lg font-bold"
               >
                 繼續下一題
               </button>
@@ -261,6 +306,6 @@ export default function TaskPlay() {
           )}
         </div>
       </div>
-    </Layout>
+    </PageBackground>
   )
 }

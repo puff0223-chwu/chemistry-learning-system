@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Layout from '../components/Layout.jsx'
-import TopicCard from '../components/TopicCard.jsx'
+import PageBackground from '../components/PageBackground.jsx'
+import StudentInfoModal, { getStudentInfo } from '../components/StudentInfoModal.jsx'
 import { supabase } from '../lib/supabase.js'
 
 export default function BattleSelect() {
@@ -9,6 +9,7 @@ export default function BattleSelect() {
   const [topics, setTopics] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [pendingTopicId, setPendingTopicId] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -27,30 +28,59 @@ export default function BattleSelect() {
     }
   }, [])
 
-  return (
-    <Layout>
-      <div className="flex-1 px-6 py-10 max-w-3xl mx-auto w-full">
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="text-slate-500 hover:text-navy mb-6"
-        >
-          ← 返回首頁
-        </button>
-        <h1 className="text-3xl font-bold mb-8 text-center">⚔️ 選擇對戰主題</h1>
+  function handleSelectTopic(topicId) {
+    if (getStudentInfo()) {
+      navigate(`/battle/${topicId}`)
+    } else {
+      setPendingTopicId(topicId)
+    }
+  }
 
-        {loading && <p className="text-center text-slate-500">載入中...</p>}
-        {error && <p className="text-center text-red-600">載入失敗：{error}</p>}
+  return (
+    <PageBackground image="/bg-battle.jpg.png">
+      <div className="flex-1 px-6 py-10 max-w-4xl mx-auto w-full">
+        <div className="flex items-center justify-between mb-8">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="text-white/70 hover:text-white text-sm border border-white/30 rounded-full px-4 py-2 transition-colors"
+          >
+            ← 返回首頁
+          </button>
+          <h1 className="text-2xl md:text-3xl font-bold text-white">選擇對戰主題</h1>
+        </div>
+
+        {loading && <p className="text-center text-sub">載入中...</p>}
+        {error && <p className="text-center text-badglow">載入失敗：{error}</p>}
         {!loading && !error && topics.length === 0 && (
-          <p className="text-center text-slate-500">目前尚無主題，請聯絡老師新增。</p>
+          <p className="text-center text-sub">目前尚無主題，請聯絡老師新增。</p>
         )}
 
-        <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {topics.map((topic) => (
-            <TopicCard key={topic.id} topic={topic} onClick={() => navigate(`/battle/${topic.id}`)} />
+            <button
+              key={topic.id}
+              type="button"
+              onClick={() => handleSelectTopic(topic.id)}
+              className="glass-card glow-hover text-left rounded-2xl p-6"
+              style={{ borderLeft: '4px solid #FFB800' }}
+            >
+              <h3 className="text-xl font-bold text-white mb-2">{topic.name}</h3>
+              {topic.description && <p className="text-sub text-sm leading-relaxed">{topic.description}</p>}
+            </button>
           ))}
         </div>
       </div>
-    </Layout>
+
+      {pendingTopicId !== null && (
+        <StudentInfoModal
+          onSubmit={() => {
+            const id = pendingTopicId
+            setPendingTopicId(null)
+            navigate(`/battle/${id}`)
+          }}
+        />
+      )}
+    </PageBackground>
   )
 }

@@ -9,11 +9,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'teacher@chemistry-learning-system.local'
+export const DEFAULT_ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'teacher@chemistry-learning-system.local'
 
-export async function adminSignIn(password) {
+export async function adminSignIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: ADMIN_EMAIL,
+    email,
     password,
   })
   if (error) throw error

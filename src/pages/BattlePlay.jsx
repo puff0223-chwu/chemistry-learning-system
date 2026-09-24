@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import HeartDisplay from '../components/HeartDisplay.jsx'
 
 const QUESTION_SECONDS = 180
 const MAX_HEARTS = 10
+const BG_IMAGE = '/bg-battle.jpg.png'
+const OVERLAY = 'rgba(0, 10, 30, 0.75)'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -19,17 +21,30 @@ function normalize(str) {
   return (str ?? '').trim().toLowerCase()
 }
 
-const rotatedSlotStyle = {
-  position: 'relative',
-  overflow: 'hidden',
-  height: '100vh',
-  width: 'calc((100vw - 84px) / 2)',
-  flexShrink: 0,
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches,
+  )
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 768px)')
+    const handler = (e) => setIsDesktop(e.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [])
+  return isDesktop
 }
 
-function RotatedPanel({ rotate, children }) {
+function RotatedSlot({ rotate, children }) {
   return (
-    <div style={rotatedSlotStyle}>
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        height: '100vh',
+        width: 'calc((100vw - 84px) / 2)',
+        flexShrink: 0,
+      }}
+    >
       <div
         style={{
           position: 'absolute',
@@ -52,26 +67,34 @@ function RotatedPanel({ rotate, children }) {
   )
 }
 
-function PlayerPanel({ label, question, onAnswer, locked, resolved, feedback }) {
+function PlayerPanel({ label, question, onAnswer, locked, resolved, feedback, selected }) {
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-[80vh]">
-      <h2 className="text-xl font-bold text-cyan-dark">{label}</h2>
+      <h2 className="text-xl font-bold text-glow">{label}</h2>
       {question ? (
         <>
-          <p className="text-lg font-bold text-center leading-snug">{question.content}</p>
+          <p className="text-lg font-bold text-center leading-snug text-white">{question.content}</p>
           <div className="grid grid-cols-1 gap-2 w-full">
             {['A', 'B', 'C', 'D'].map((letter) => {
               const text = question[`option_${letter.toLowerCase()}`]
               if (!text) return null
+              const isCorrectPick = resolved && feedback?.type === 'good' && selected === letter
+              const isWrongPick = selected === letter && feedback?.type === 'bad' && locked
+              let style = {}
+              if (isCorrectPick) style = { background: 'rgba(0, 230, 118, 0.25)', border: '1px solid #00E676' }
+              else if (isWrongPick) style = { background: 'rgba(255, 82, 82, 0.25)', border: '1px solid #FF5252' }
               return (
                 <button
                   key={letter}
                   type="button"
                   disabled={locked || resolved}
                   onClick={() => onAnswer(letter)}
-                  className="text-left bg-white hover:bg-cyan-50 disabled:opacity-40 border border-slate-200 rounded-lg px-4 py-3 text-base transition-colors"
+                  className={`text-left disabled:opacity-60 rounded-lg px-4 py-3 text-base transition-colors text-white ${
+                    isCorrectPick || isWrongPick ? '' : 'glass-card glow-hover'
+                  }`}
+                  style={style}
                 >
-                  <span className="font-bold text-cyan-dark mr-2">{letter}.</span>
+                  <span className="font-bold text-glow mr-2">{letter}.</span>
                   {text}
                 </button>
               )
@@ -79,17 +102,56 @@ function PlayerPanel({ label, question, onAnswer, locked, resolved, feedback }) 
           </div>
           {feedback && (
             <div
-              className={`w-full text-center text-white rounded-lg px-3 py-2 font-bold ${
-                feedback.type === 'good' ? 'bg-green-500' : 'bg-orange-500'
-              }`}
+              className="w-full text-center rounded-lg px-3 py-2 font-bold text-white"
+              style={
+                feedback.type === 'good'
+                  ? { background: 'rgba(0, 230, 118, 0.25)', border: '1px solid #00E676' }
+                  : { background: 'rgba(255, 82, 82, 0.25)', border: '1px solid #FF5252' }
+              }
             >
               {feedback.text}
             </div>
           )}
         </>
       ) : (
-        <p className="text-slate-500">沒有可用的 PK 題目</p>
+        <p className="text-sub">沒有可用的 PK 題目</p>
       )}
+    </div>
+  )
+}
+
+function ControlBar({ horizontal, timeLeft, heartsA, heartsB, hitA, hitB, onNext, onEnd }) {
+  return (
+    <div
+      className={
+        horizontal
+          ? 'flex flex-row items-center justify-between px-4 py-2 gap-3'
+          : 'flex flex-col items-center justify-between py-4 gap-3'
+      }
+      style={horizontal ? { height: '72px', flexShrink: 0 } : { width: '84px', flexShrink: 0 }}
+    >
+      <div className={`text-lg font-extrabold ${timeLeft <= 30 ? 'text-badglow animate-pulse' : 'text-white'}`}>
+        {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
+      </div>
+      <HeartDisplay hearts={heartsA} label="A" hit={hitA} />
+      <div className={horizontal ? 'w-px h-10 bg-white/20' : 'w-10 h-px bg-white/20'} />
+      <HeartDisplay hearts={heartsB} label="B" hit={hitB} />
+      <button
+        type="button"
+        onClick={onNext}
+        className="bg-glow text-ink rounded-lg px-2 py-3 text-xs font-bold"
+        style={horizontal ? undefined : { writingMode: 'vertical-rl' }}
+      >
+        ▶ 下一題
+      </button>
+      <button
+        type="button"
+        onClick={onEnd}
+        className="text-white/60 hover:text-white/90 border border-white/30 rounded-lg px-2 py-3 text-xs"
+        style={horizontal ? undefined : { writingMode: 'vertical-rl' }}
+      >
+        🏳 結束
+      </button>
     </div>
   )
 }
@@ -97,8 +159,8 @@ function PlayerPanel({ label, question, onAnswer, locked, resolved, feedback }) 
 export default function BattlePlay() {
   const { topicId } = useParams()
   const navigate = useNavigate()
+  const isDesktop = useIsDesktop()
 
-  const [topic, setTopic] = useState(null)
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -108,28 +170,49 @@ export default function BattlePlay() {
   const [heartsB, setHeartsB] = useState(MAX_HEARTS)
   const [lockedA, setLockedA] = useState(false)
   const [lockedB, setLockedB] = useState(false)
+  const [selectedA, setSelectedA] = useState(null)
+  const [selectedB, setSelectedB] = useState(null)
   const [resolved, setResolved] = useState(false)
   const [feedbackA, setFeedbackA] = useState(null)
   const [feedbackB, setFeedbackB] = useState(null)
   const [timeLeft, setTimeLeft] = useState(QUESTION_SECONDS)
   const [gameEnded, setGameEnded] = useState(false)
+  const [hitA, setHitA] = useState(false)
+  const [hitB, setHitB] = useState(false)
+
+  const prevHeartsA = useRef(MAX_HEARTS)
+  const prevHeartsB = useRef(MAX_HEARTS)
+
+  useEffect(() => {
+    if (heartsA < prevHeartsA.current) {
+      setHitA(true)
+      const t = setTimeout(() => setHitA(false), 350)
+      prevHeartsA.current = heartsA
+      return () => clearTimeout(t)
+    }
+    prevHeartsA.current = heartsA
+  }, [heartsA])
+
+  useEffect(() => {
+    if (heartsB < prevHeartsB.current) {
+      setHitB(true)
+      const t = setTimeout(() => setHitB(false), 350)
+      prevHeartsB.current = heartsB
+      return () => clearTimeout(t)
+    }
+    prevHeartsB.current = heartsB
+  }, [heartsB])
 
   useEffect(() => {
     let active = true
     async function load() {
-      const [{ data: topicData, error: topicError }, { data: questionData, error: questionError }] =
-        await Promise.all([
-          supabase.from('topics').select('*').eq('id', topicId).single(),
-          supabase
-            .from('questions')
-            .select('*')
-            .eq('topic_id', topicId)
-            .in('mode', ['pk', 'both'])
-            .eq('type', 'choice'),
-        ])
+      const { data: questionData, error: questionError } = await supabase
+        .from('questions')
+        .select('*')
+        .eq('topic_id', topicId)
+        .in('mode', ['pk', 'both'])
+        .eq('type', 'choice')
       if (!active) return
-      if (topicError) setError(topicError.message)
-      else setTopic(topicData)
       if (questionError) setError(questionError.message)
       else setQuestions(shuffle(questionData ?? []))
       setLoading(false)
@@ -156,16 +239,13 @@ export default function BattlePlay() {
     if (gameEnded || resolved || !current) return
     if (timeLeft <= 0) {
       setResolved(true)
-      const messages = []
       if (!lockedA) {
         setHeartsA((h) => Math.max(0, h - 1))
         setFeedbackA({ type: 'bad', text: '時間到，未作答 -1 血' })
-        messages.push('A')
       }
       if (!lockedB) {
         setHeartsB((h) => Math.max(0, h - 1))
         setFeedbackB({ type: 'bad', text: '時間到，未作答 -1 血' })
-        messages.push('B')
       }
       return
     }
@@ -179,6 +259,9 @@ export default function BattlePlay() {
     if (player === 'B' && lockedB) return
 
     const isCorrect = normalize(letter) === normalize(current.answer)
+
+    if (player === 'A') setSelectedA(letter)
+    else setSelectedB(letter)
 
     if (isCorrect) {
       setResolved(true)
@@ -207,6 +290,8 @@ export default function BattlePlay() {
     setQIndex((i) => i + 1)
     setLockedA(false)
     setLockedB(false)
+    setSelectedA(null)
+    setSelectedB(null)
     setResolved(false)
     setFeedbackA(null)
     setFeedbackB(null)
@@ -220,6 +305,8 @@ export default function BattlePlay() {
     setHeartsB(MAX_HEARTS)
     setLockedA(false)
     setLockedB(false)
+    setSelectedA(null)
+    setSelectedB(null)
     setResolved(false)
     setFeedbackA(null)
     setFeedbackB(null)
@@ -227,9 +314,13 @@ export default function BattlePlay() {
     setGameEnded(false)
   }
 
+  const backgroundStyle = {
+    backgroundImage: `linear-gradient(${OVERLAY}, ${OVERLAY}), url(${BG_IMAGE})`,
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-paper text-navy flex items-center justify-center text-xl">
+      <div className="min-h-screen bg-cover bg-center flex items-center justify-center text-xl text-white" style={backgroundStyle}>
         載入題目中...
       </div>
     )
@@ -237,7 +328,7 @@ export default function BattlePlay() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-paper text-navy flex items-center justify-center text-red-600 text-xl">
+      <div className="min-h-screen bg-cover bg-center flex items-center justify-center text-badglow text-xl" style={backgroundStyle}>
         載入失敗：{error}
       </div>
     )
@@ -245,12 +336,12 @@ export default function BattlePlay() {
 
   if (questions.length === 0) {
     return (
-      <div className="min-h-screen bg-paper text-navy flex flex-col items-center justify-center gap-4">
-        <p className="text-xl text-slate-600">這個主題還沒有 PK 選擇題。</p>
+      <div className="min-h-screen bg-cover bg-center flex flex-col items-center justify-center gap-4" style={backgroundStyle}>
+        <p className="text-xl text-white">這個主題還沒有 PK 選擇題。</p>
         <button
           type="button"
           onClick={() => navigate('/battle')}
-          className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 font-bold"
+          className="bg-glow text-ink rounded-xl px-6 py-3 font-bold"
         >
           返回主題選擇
         </button>
@@ -261,8 +352,8 @@ export default function BattlePlay() {
   if (gameEnded) {
     const winner = heartsA === heartsB ? null : heartsA > heartsB ? 'A' : 'B'
     return (
-      <div className="min-h-screen bg-paper text-navy flex flex-col items-center justify-center gap-6 text-center px-6">
-        <h1 className="text-4xl font-extrabold">
+      <div className="min-h-screen bg-cover bg-center flex flex-col items-center justify-center gap-6 text-center px-6" style={backgroundStyle}>
+        <h1 className="text-4xl font-extrabold text-white">
           {winner ? `🏆 Player ${winner} 獲勝！` : '⚖️ 平手！'}
         </h1>
         <div className="flex gap-10">
@@ -270,17 +361,13 @@ export default function BattlePlay() {
           <HeartDisplay hearts={heartsB} label="Player B" />
         </div>
         <div className="flex gap-4">
-          <button
-            type="button"
-            onClick={restartGame}
-            className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-6 py-3 font-bold"
-          >
+          <button type="button" onClick={restartGame} className="bg-glow text-ink rounded-xl px-6 py-3 font-bold">
             再來一局
           </button>
           <button
             type="button"
             onClick={() => navigate('/battle')}
-            className="bg-white hover:bg-slate-100 border border-slate-300 rounded-xl px-6 py-3 font-bold"
+            className="text-white border border-white/30 hover:bg-white/10 rounded-xl px-6 py-3 font-bold"
           >
             返回主題選擇
           </button>
@@ -289,9 +376,49 @@ export default function BattlePlay() {
     )
   }
 
+  if (isDesktop) {
+    return (
+      <div className="h-screen w-screen bg-cover bg-center flex overflow-hidden fixed inset-0" style={backgroundStyle}>
+        <RotatedSlot rotate={90}>
+          <PlayerPanel
+            label="Player A"
+            question={current}
+            onAnswer={(letter) => handleAnswer('A', letter)}
+            locked={lockedA}
+            resolved={resolved}
+            feedback={feedbackA}
+            selected={selectedA}
+          />
+        </RotatedSlot>
+
+        <ControlBar
+          timeLeft={timeLeft}
+          heartsA={heartsA}
+          heartsB={heartsB}
+          hitA={hitA}
+          hitB={hitB}
+          onNext={nextQuestion}
+          onEnd={endGame}
+        />
+
+        <RotatedSlot rotate={-90}>
+          <PlayerPanel
+            label="Player B"
+            question={current}
+            onAnswer={(letter) => handleAnswer('B', letter)}
+            locked={lockedB}
+            resolved={resolved}
+            feedback={feedbackB}
+            selected={selectedB}
+          />
+        </RotatedSlot>
+      </div>
+    )
+  }
+
   return (
-    <div className="h-screen w-screen bg-paper text-navy flex overflow-hidden fixed inset-0">
-      <RotatedPanel rotate={90}>
+    <div className="h-screen w-screen bg-cover bg-center flex flex-col overflow-hidden fixed inset-0" style={backgroundStyle}>
+      <div className="flex-1 overflow-y-auto flex items-center justify-center py-4">
         <PlayerPanel
           label="Player A"
           question={current}
@@ -299,34 +426,22 @@ export default function BattlePlay() {
           locked={lockedA}
           resolved={resolved}
           feedback={feedbackA}
+          selected={selectedA}
         />
-      </RotatedPanel>
-
-      <div className="flex flex-col items-center justify-between py-4 gap-3" style={{ width: '84px', flexShrink: 0 }}>
-        <div className={`text-lg font-extrabold ${timeLeft <= 30 ? 'text-red-500' : 'text-navy'}`}>
-          {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}
-        </div>
-        <HeartDisplay hearts={heartsA} label="A" />
-        <HeartDisplay hearts={heartsB} label="B" />
-        <button
-          type="button"
-          onClick={nextQuestion}
-          className="bg-cyan hover:bg-cyan-dark text-white rounded-lg px-2 py-3 text-xs font-bold writing-vertical"
-          style={{ writingMode: 'vertical-rl' }}
-        >
-          ▶ 下一題
-        </button>
-        <button
-          type="button"
-          onClick={() => endGame()}
-          className="bg-white hover:bg-slate-100 border border-slate-300 rounded-lg px-2 py-3 text-xs"
-          style={{ writingMode: 'vertical-rl' }}
-        >
-          🏳 結束比賽
-        </button>
       </div>
 
-      <RotatedPanel rotate={-90}>
+      <ControlBar
+        horizontal
+        timeLeft={timeLeft}
+        heartsA={heartsA}
+        heartsB={heartsB}
+        hitA={hitA}
+        hitB={hitB}
+        onNext={nextQuestion}
+        onEnd={endGame}
+      />
+
+      <div className="flex-1 overflow-y-auto flex items-center justify-center py-4" style={{ transform: 'rotate(180deg)' }}>
         <PlayerPanel
           label="Player B"
           question={current}
@@ -334,8 +449,9 @@ export default function BattlePlay() {
           locked={lockedB}
           resolved={resolved}
           feedback={feedbackB}
+          selected={selectedB}
         />
-      </RotatedPanel>
+      </div>
     </div>
   )
 }
