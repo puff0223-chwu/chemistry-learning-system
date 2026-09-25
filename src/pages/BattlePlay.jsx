@@ -14,6 +14,15 @@ const GREEN_STYLE = { background: 'rgba(0, 230, 118, 0.25)', border: '1px solid 
 const RED_STYLE = { background: 'rgba(255, 82, 82, 0.25)', border: '1px solid #FF5252' }
 const AMBER_STYLE = { background: 'rgba(255, 184, 0, 0.2)', border: '1px solid #FFB800' }
 
+function fetchPkQuestions(topicId) {
+  return supabase
+    .from('questions')
+    .select('*')
+    .eq('topic_id', topicId)
+    .in('mode', ['pk', 'both'])
+    .eq('type', 'choice')
+}
+
 function shuffle(arr) {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
@@ -253,7 +262,7 @@ function PlayerArea({ side, question, timeLeft, hearts, answer, phase, result, o
   )
 }
 
-function EndOverlay({ heartsA, heartsB, onRestart, onExit }) {
+function EndOverlay({ heartsA, heartsB, restarting, onRestart, onExit }) {
   const winner = heartsA === heartsB ? null : heartsA > heartsB ? 'A' : 'B'
   return (
     <div
@@ -274,8 +283,13 @@ function EndOverlay({ heartsA, heartsB, onRestart, onExit }) {
         </div>
       </div>
       <div className="flex gap-4">
-        <button type="button" onClick={onRestart} className="bg-glow text-ink rounded-xl px-6 py-3 text-lg font-bold">
-          再來一局
+        <button
+          type="button"
+          onClick={onRestart}
+          disabled={restarting}
+          className="bg-glow text-ink disabled:opacity-60 rounded-xl px-6 py-3 text-lg font-bold"
+        >
+          {restarting ? '載入題庫中...' : '再來一局'}
         </button>
         <button
           type="button"
@@ -307,16 +321,12 @@ export default function BattlePlay() {
   const [outcome, setOutcome] = useState(null)
   const [timeLeft, setTimeLeft] = useState(QUESTION_SECONDS)
   const [gameEnded, setGameEnded] = useState(false)
+  const [restarting, setRestarting] = useState(false)
 
   useEffect(() => {
     let active = true
     async function load() {
-      const { data, error: err } = await supabase
-        .from('questions')
-        .select('*')
-        .eq('topic_id', topicId)
-        .in('mode', ['pk', 'both'])
-        .eq('type', 'choice')
+      const { data, error: err } = await fetchPkQuestions(topicId)
       if (!active) return
       if (err) setError(err.message)
       else setQuestions(shuffle(data ?? []))
@@ -379,8 +389,14 @@ export default function BattlePlay() {
     setTimeLeft(QUESTION_SECONDS)
   }
 
-  function restartGame() {
-    setQuestions((qs) => shuffle(qs))
+  async function restartGame() {
+    if (restarting) return
+    setRestarting(true)
+    // Re-read the bank so questions added since the last match are included.
+    // If the refresh fails, fall back to reshuffling the bank already in memory.
+    const { data, error: err } = await fetchPkQuestions(topicId)
+    setQuestions(shuffle(err ? questions : (data ?? [])))
+    setRestarting(false)
     setQIndex(0)
     setHeartsA(MAX_HEARTS)
     setHeartsB(MAX_HEARTS)
@@ -435,7 +451,7 @@ export default function BattlePlay() {
     onAnswer: (letter) => handleAnswer('B', letter),
   }
   const overlay = gameEnded && (
-    <EndOverlay heartsA={heartsA} heartsB={heartsB} onRestart={restartGame} onExit={exit} />
+    <EndOverlay heartsA={heartsA} heartsB={heartsB} restarting={restarting} onRestart={restartGame} onExit={exit} />
   )
 
   if (isWide) {
