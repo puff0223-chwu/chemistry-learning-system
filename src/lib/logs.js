@@ -8,6 +8,13 @@ function report(what, err) {
   console.error(`[logs] ${what} 寫入失敗：`, err?.message ?? err)
 }
 
+// Events fired in the same millisecond still need a stable order, so timestamps only ever increase.
+let lastStamp = 0
+function nextTimestamp() {
+  lastStamp = Math.max(Date.now(), lastStamp + 1)
+  return new Date(lastStamp).toISOString()
+}
+
 export function newUuid() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
   const b = crypto.getRandomValues(new Uint8Array(16))
@@ -74,7 +81,7 @@ export function logTaskEvent(sessionUuid, event) {
       is_correct: event.isCorrect ?? null,
       time_spent_seconds: event.timeSpentSeconds ?? null,
       hint_count: event.hintCount ?? 0,
-      created_at: new Date().toISOString(),
+      created_at: nextTimestamp(),
     },
     [sessionUuid],
   )
@@ -100,7 +107,7 @@ export function logBattleRound(round) {
       player_a_hp_after: round.hpA,
       player_b_hp_after: round.hpB,
       winner: round.winner,
-      created_at: new Date().toISOString(),
+      created_at: nextTimestamp(),
     },
     [sessionA, sessionB],
   )

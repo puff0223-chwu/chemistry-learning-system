@@ -74,7 +74,13 @@ export async function queryTaskData(filters) {
   const sessions = await querySessions('task', filters)
   const logs = await fetchByChunks(
     sessions.map((s) => s.session_uuid),
-    (part) => supabase.from('task_logs').select('*').in('session_uuid', part).order('id', { ascending: true }),
+    (part) =>
+      supabase
+        .from('task_logs')
+        .select('*')
+        .in('session_uuid', part)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true }),
   )
   const logsBySession = new Map()
   for (const log of logs) {
