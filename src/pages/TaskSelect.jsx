@@ -9,7 +9,8 @@ export default function TaskSelect() {
   const [topics, setTopics] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [pendingTopicId, setPendingTopicId] = useState(null)
+  const [modal, setModal] = useState(null)
+  const [studentInfo, setStudentInfo] = useState(getStudentInfo)
 
   useEffect(() => {
     let active = true
@@ -32,7 +33,7 @@ export default function TaskSelect() {
     if (getStudentInfo()) {
       navigate(`/task/${topicId}`)
     } else {
-      setPendingTopicId(topicId)
+      setModal({ topicId })
     }
   }
 
@@ -49,6 +50,19 @@ export default function TaskSelect() {
           </button>
           <h1 className="text-2xl md:text-3xl font-bold text-white">選擇任務主題</h1>
         </div>
+
+        {studentInfo && (
+          <p className="text-sub text-sm mb-4 text-center">
+            作答身分：{studentInfo.className} {studentInfo.seatNumber}號 {studentInfo.name}
+            <button
+              type="button"
+              onClick={() => setModal({ topicId: null })}
+              className="ml-3 text-xs text-white/50 hover:text-white/80 underline"
+            >
+              修改資訊
+            </button>
+          </p>
+        )}
 
         {loading && <p className="text-center text-sub">載入中...</p>}
         {error && <p className="text-center text-badglow">載入失敗：{error}</p>}
@@ -72,12 +86,17 @@ export default function TaskSelect() {
         </div>
       </div>
 
-      {pendingTopicId !== null && (
+      {modal && (
         <StudentInfoModal
-          onSubmit={() => {
-            const id = pendingTopicId
-            setPendingTopicId(null)
-            navigate(`/task/${id}`)
+          onClose={() => {
+            setModal(null)
+            setStudentInfo(getStudentInfo())
+          }}
+          onSubmit={(info) => {
+            const id = modal.topicId
+            setModal(null)
+            setStudentInfo(info)
+            if (id !== null) navigate(`/task/${id}`)
           }}
         />
       )}
