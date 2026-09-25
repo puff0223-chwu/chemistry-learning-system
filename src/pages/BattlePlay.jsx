@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import HeartDisplay from '../components/HeartDisplay.jsx'
@@ -68,6 +68,27 @@ function computeOutcome(correctAnswer, ansA, ansB) {
   }
 }
 
+// Shrinks the element's font (from max down to min) until its content fits the space it was given.
+function useFitText(ref, deps, max, min) {
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const fit = () => {
+      let size = max
+      el.style.fontSize = `${size}px`
+      while (size > min && el.scrollHeight > el.clientHeight + 1) {
+        size -= 1
+        el.style.fontSize = `${size}px`
+      }
+    }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(el)
+    return () => observer.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+}
+
 function useIsWide() {
   const [isWide, setIsWide] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 600px)').matches,
@@ -100,16 +121,29 @@ function RotatedFrame({ rotate, width, height, slotStyle, children }) {
   )
 }
 
-function ControlButtons({ onNext, onEnd }) {
+function ControlButtons({ onNext, onEnd, nextEnabled, endLit }) {
   return (
     <div className="flex items-center justify-center gap-3 w-full h-full">
-      <button type="button" onClick={onNext} className="bg-glow text-ink rounded-lg px-4 py-2 text-lg font-bold">
+      <button
+        type="button"
+        onClick={onNext}
+        disabled={!nextEnabled}
+        className={`rounded-lg px-4 py-2 text-lg font-bold transition-all ${
+          nextEnabled
+            ? 'bg-glow text-ink shadow-[0_0_16px_rgba(0,212,255,0.7)]'
+            : 'bg-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
+        }`}
+      >
         ▶ 下一題
       </button>
       <button
         type="button"
         onClick={onEnd}
-        className="text-white/70 hover:text-white border border-white/30 rounded-lg px-4 py-2 text-lg"
+        className={`rounded-lg px-4 py-2 text-lg transition-all ${
+          endLit
+            ? 'bg-warnglow text-ink font-bold shadow-[0_0_16px_rgba(255,184,0,0.7)]'
+            : 'text-[rgba(255,255,255,0.7)] hover:text-white border border-[rgba(255,255,255,0.3)]'
+        }`}
       >
         🏳 結束
       </button>
@@ -117,10 +151,42 @@ function ControlButtons({ onNext, onEnd }) {
   )
 }
 
+function OptionButton({ letter, text, style, cls, disabled, showLock, onClick }) {
+  const ref = useRef(null)
+  useFitText(ref, [text], 18, 12)
+  return (
+    <button
+      ref={ref}
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex items-center gap-2 text-left rounded-xl px-4 py-2 min-h-0 overflow-y-auto ${cls}`}
+      style={style}
+    >
+      <span className="font-bold text-glow">{letter}.</span>
+      <span className="flex-1">{text}</span>
+      {showLock && <span className="text-white/60">✓</span>}
+    </button>
+  )
+}
+
+function QuestionText({ text }) {
+  const ref = useRef(null)
+  useFitText(ref, [text], 22, 13)
+  return (
+    <p ref={ref} className="font-bold text-center leading-snug overflow-y-auto min-h-0" style={{ maxHeight: '42%' }}>
+      {text}
+    </p>
+  )
+}
+
 function PlayerArea({ side, question, timeLeft, hearts, answer, phase, result, onAnswer, controls }) {
   const revealed = phase === 'revealed'
   const urgent = timeLeft <= 30
   const bannerStyle = result?.kind === 'good' ? GREEN_STYLE : result?.kind === 'warn' ? AMBER_STYLE : RED_STYLE
+  const options = ['A', 'B', 'C', 'D']
+    .map((letter) => ({ letter, text: question[`option_${letter.toLowerCase()}`] }))
+    .filter((o) => o.text)
 
   return (
     <div className="w-full h-full flex flex-col gap-2 p-3 text-white">
@@ -136,19 +202,20 @@ function PlayerArea({ side, question, timeLeft, hearts, answer, phase, result, o
         </span>
       </div>
 
-      <p className="text-xl font-bold text-center leading-snug">{question.content}</p>
+      <QuestionText text={question.content} />
 
       <div
-        className="rounded-lg px-3 py-1 text-center font-bold text-lg"
+        className="rounded-lg px-3 py-1 text-center font-bold text-lg shrink-0"
         style={revealed && result ? bannerStyle : { visibility: 'hidden' }}
       >
         {revealed && result ? result.text : '　'}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
-        {['A', 'B', 'C', 'D'].map((letter) => {
-          const text = question[`option_${letter.toLowerCase()}`]
-          if (!text) return null
+      <div
+        className="grid grid-cols-2 gap-3 flex-1 min-h-0"
+        style={{ gridTemplateRows: `repeat(${Math.max(1, Math.ceil(options.length / 2))}, minmax(0, 1fr))` }}
+      >
+        {options.map(({ letter, text }) => {
           const chosen = answer?.letter === letter
           const isCorrectOption = revealed && normalize(letter) === normalize(question.answer)
           const isWrongChoice = revealed && chosen && !isCorrectOption
@@ -163,25 +230,23 @@ function PlayerArea({ side, question, timeLeft, hearts, answer, phase, result, o
           else cls += ' glass-card glow-hover'
 
           return (
-            <button
+            <OptionButton
               key={letter}
-              type="button"
-              disabled={disabled}
-              onClick={() => onAnswer(letter)}
-              className={`flex items-center gap-2 text-left rounded-xl px-4 py-2 text-lg ${cls}`}
+              letter={letter}
+              text={text}
               style={style}
-            >
-              <span className="font-bold text-glow">{letter}.</span>
-              <span className="flex-1">{text}</span>
-              {!revealed && chosen && <span className="text-white/60">✓</span>}
-            </button>
+              cls={cls}
+              disabled={disabled}
+              showLock={!revealed && chosen}
+              onClick={() => onAnswer(letter)}
+            />
           )
         })}
       </div>
 
       {controls && (
-        <div style={{ height: 44 }}>
-          <ControlButtons onNext={controls.onNext} onEnd={controls.onEnd} />
+        <div className="shrink-0" style={{ height: 44 }}>
+          <ControlButtons {...controls} />
         </div>
       )}
     </div>
@@ -263,7 +328,10 @@ export default function BattlePlay() {
     }
   }, [topicId])
 
-  const current = questions.length > 0 ? questions[qIndex % questions.length] : null
+  const current = questions[qIndex] ?? null
+  const isLastQuestion = qIndex >= questions.length - 1
+  const nextEnabled = phase === 'revealed' && !isLastQuestion && heartsA > 0 && heartsB > 0
+  const allAnswered = phase === 'revealed' && isLastQuestion
 
   function settle(ansA, ansB) {
     const result = computeOutcome(current.answer, ansA, ansB)
@@ -302,7 +370,7 @@ export default function BattlePlay() {
   }
 
   function nextQuestion() {
-    if (gameEnded || heartsA <= 0 || heartsB <= 0) return
+    if (gameEnded || !nextEnabled) return
     setQIndex((i) => i + 1)
     setAnswerA(null)
     setAnswerB(null)
@@ -325,6 +393,7 @@ export default function BattlePlay() {
   }
 
   const endGame = () => setGameEnded(true)
+  const controls = { onNext: nextQuestion, onEnd: endGame, nextEnabled, endLit: allAnswered }
   const exit = () => navigate('/battle')
   const backgroundStyle = { backgroundImage: `linear-gradient(${OVERLAY}, ${OVERLAY}), url(${BG_IMAGE})` }
 
@@ -389,10 +458,10 @@ export default function BattlePlay() {
           }}
         >
           <RotatedFrame rotate={90} width="40vh" height={BAR_WIDTH} slotStyle={barSection}>
-            <ControlButtons onNext={nextQuestion} onEnd={endGame} />
+            <ControlButtons {...controls} />
           </RotatedFrame>
           <RotatedFrame rotate={-90} width="40vh" height={BAR_WIDTH} slotStyle={barSection}>
-            <ControlButtons onNext={nextQuestion} onEnd={endGame} />
+            <ControlButtons {...controls} />
           </RotatedFrame>
         </div>
 
@@ -404,7 +473,6 @@ export default function BattlePlay() {
     )
   }
 
-  const controls = { onNext: nextQuestion, onEnd: endGame }
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-cover bg-center" style={backgroundStyle}>
       <div className="flex-1 min-h-0 overflow-y-auto">
