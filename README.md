@@ -1,4 +1,4 @@
-# 化學學習系統
+# 化學偵探學習系統
 
 React + Vite + Tailwind CSS + Supabase 打造的化學學習網頁應用，含任務闖關模式、雙人 PK 對戰模式與老師後台。
 

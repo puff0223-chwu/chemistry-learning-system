@@ -7,7 +7,7 @@ export default function Home() {
   return (
     <PageBackground image="/bg-home.jpg.png">
       <div className="flex justify-between items-start px-6 py-5">
-        <span className="text-white text-sm md:text-base font-bold">🔬 化學學習系統</span>
+        <span className="text-white text-sm md:text-base font-bold">🔬 化學偵探學習系統</span>
         <button
           type="button"
           onClick={() => navigate('/admin')}
@@ -23,7 +23,7 @@ export default function Home() {
             className="text-4xl md:text-5xl font-extrabold tracking-wide text-white mb-3"
             style={{ textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}
           >
-            化學學習系統
+            化學偵探學習系統
           </h1>
           <p className="text-sub text-lg">選擇你的學習模式，開始探索化學的世界</p>
         </div>
@@ -54,7 +54,7 @@ export default function Home() {
       </div>
 
       <div className="text-center pb-4">
-        <span className="text-xs text-white/40">© 巫魚子老師 化學學習系統</span>
+        <span className="text-xs text-white/40">© 巫魚子老師 化學偵探學習系統</span>
       </div>
     </PageBackground>
   )
