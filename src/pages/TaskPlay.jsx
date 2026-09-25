@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PageBackground from '../components/PageBackground.jsx'
+import StudentInfoModal from '../components/StudentInfoModal.jsx'
 import { supabase } from '../lib/supabase.js'
+import { getStudentInfo } from '../lib/studentInfo.js'
+import { createStudentSession, logTaskEvent } from '../lib/logs.js'
 
 function normalize(str) {
   return (str ?? '').trim().toLowerCase()
@@ -21,6 +24,28 @@ export default function TaskPlay() {
   const [status, setStatus] = useState('answering') // answering | correct | gaveUp
   const [fillValue, setFillValue] = useState('')
   const [selected, setSelected] = useState(null)
+  const [info, setInfo] = useState(getStudentInfo)
+
+  const sessionRef = useRef(null)
+  const questionStartRef = useRef(Date.now())
+  const hintsShownRef = useRef(0)
+
+  // One student_sessions row per visit to a topic, created once the student info and topic are known.
+  useEffect(() => {
+    if (!topic || !info || sessionRef.current) return
+    sessionRef.current = createStudentSession({
+      mode: 'task',
+      purpose: info.purpose,
+      student: info,
+      topic,
+    })
+  }, [topic, info])
+
+  // Each question restarts the stopwatch and the hint counter.
+  useEffect(() => {
+    questionStartRef.current = Date.now()
+    hintsShownRef.current = 0
+  }, [index, questions.length, info])
 
   useEffect(() => {
     let active = true
@@ -59,7 +84,22 @@ export default function TaskPlay() {
     return null
   }, [current, wrongCount])
 
+  function emit(eventType, extra = {}) {
+    logTaskEvent(sessionRef.current, {
+      questionId: current.id,
+      questionOrder: index + 1,
+      eventType,
+      hintCount: hintsShownRef.current,
+      ...extra,
+    })
+  }
+
+  const elapsedSeconds = () => Math.round((Date.now() - questionStartRef.current) / 1000)
+
   function resetForNextQuestion() {
+    if (index + 1 >= questions.length) {
+      logTaskEvent(sessionRef.current, { eventType: 'topic_complete', hintCount: 0 })
+    }
     setIndex((i) => i + 1)
     setWrongCount(0)
     setStatus('answering')
@@ -67,28 +107,46 @@ export default function TaskPlay() {
     setSelected(null)
   }
 
+  // The stopwatch value goes on the event that ends the question (correct answer or asking for help).
+  function recordAttempt(given, isCorrect) {
+    if (isCorrect) {
+      emit('answer_correct', { answerGiven: given, isCorrect: true, timeSpentSeconds: elapsedSeconds() })
+      setStatus('correct')
+      return
+    }
+    emit('answer_wrong', { answerGiven: given, isCorrect: false })
+    const nextWrong = wrongCount + 1
+    const hintNumber = Math.min(nextWrong, 3)
+    if (current[`hint_${hintNumber}`]) {
+      hintsShownRef.current += 1
+      emit(`hint_${hintNumber}_shown`)
+    }
+    setWrongCount(nextWrong)
+  }
+
   function handleChoiceAnswer(letter) {
     if (status !== 'answering') return
     setSelected(letter)
-    if (normalize(letter) === normalize(current.answer)) {
-      setStatus('correct')
-    } else {
-      setWrongCount((c) => c + 1)
-    }
+    recordAttempt(letter, normalize(letter) === normalize(current.answer))
   }
 
   function handleFillSubmit(e) {
     e.preventDefault()
     if (status !== 'answering') return
-    if (normalize(fillValue) === normalize(current.answer)) {
-      setStatus('correct')
-    } else {
-      setWrongCount((c) => c + 1)
-    }
+    recordAttempt(fillValue.trim(), normalize(fillValue) === normalize(current.answer))
   }
 
   function handleGiveUp() {
+    emit('help_requested', { timeSpentSeconds: elapsedSeconds() })
     setStatus('gaveUp')
+  }
+
+  if (!info) {
+    return (
+      <PageBackground image="/bg-task.jpg.png">
+        <StudentInfoModal onClose={() => navigate('/task')} onSubmit={setInfo} />
+      </PageBackground>
+    )
   }
 
   if (loading) {

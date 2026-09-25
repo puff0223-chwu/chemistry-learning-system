@@ -7,6 +7,8 @@ import BattlePlay from './pages/BattlePlay.jsx'
 import AdminLogin from './pages/AdminLogin.jsx'
 import AdminTopics from './pages/AdminTopics.jsx'
 import AdminQuestions from './pages/AdminQuestions.jsx'
+import AdminTaskLogs from './pages/AdminTaskLogs.jsx'
+import AdminBattleLogs from './pages/AdminBattleLogs.jsx'
 import RequireAdmin from './components/RequireAdmin.jsx'
 
 function App() {
@@ -31,6 +33,22 @@ function App() {
         element={
           <RequireAdmin>
             <AdminQuestions />
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/admin/logs/task"
+        element={
+          <RequireAdmin>
+            <AdminTaskLogs />
+          </RequireAdmin>
+        }
+      />
+      <Route
+        path="/admin/logs/battle"
+        element={
+          <RequireAdmin>
+            <AdminBattleLogs />
           </RequireAdmin>
         }
       />

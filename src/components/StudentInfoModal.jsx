@@ -1,62 +1,37 @@
 import { useState } from 'react'
-
-const STORAGE_KEY = 'chemistry_student_info'
-
-export function getStudentInfo() {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-export function saveStudentInfo(info) {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(info))
-  } catch {
-    // sessionStorage unavailable — proceed without persisting
-  }
-}
-
-export function clearStudentInfo() {
-  try {
-    sessionStorage.removeItem(STORAGE_KEY)
-  } catch {
-    // ignore
-  }
-}
+import StudentFields, { PurposeSelect } from './StudentFields.jsx'
+import { EMPTY_STUDENT, clearStudentInfo, getStudentInfo, saveStudentInfo } from '../lib/studentInfo.js'
 
 export default function StudentInfoModal({ onSubmit, onClose }) {
   const saved = getStudentInfo()
-  const [className, setClassName] = useState(saved?.className ?? '')
-  const [seatNumber, setSeatNumber] = useState(saved?.seatNumber ?? '')
-  const [name, setName] = useState(saved?.name ?? '')
+  const [purpose, setPurpose] = useState(saved?.purpose ?? '')
+  const [student, setStudent] = useState(
+    saved ? { grade: saved.grade, className: saved.className, seatNumber: saved.seatNumber, name: saved.name } : EMPTY_STUDENT,
+  )
 
   function handleSubmit(e) {
     e.preventDefault()
-    const info = { className: className.trim(), seatNumber: seatNumber.trim(), name: name.trim() }
+    const info = { purpose, ...student, name: student.name.trim() }
     saveStudentInfo(info)
     onSubmit(info)
   }
 
   function handleReset() {
     clearStudentInfo()
-    setClassName('')
-    setSeatNumber('')
-    setName('')
+    setPurpose('')
+    setStudent(EMPTY_STUDENT)
   }
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center px-4 z-50"
+      className="fixed inset-0 flex items-center justify-center px-4 py-6 z-50"
       style={{ backgroundColor: 'rgba(0, 10, 30, 0.8)' }}
       onClick={onClose}
     >
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
-        className="glass-card relative rounded-2xl p-8 w-full max-w-sm flex flex-col gap-5 shadow-2xl"
+        className="glass-card relative rounded-2xl p-8 w-full max-w-sm max-h-full overflow-y-auto flex flex-col gap-4 shadow-2xl"
       >
         <button
           type="button"
@@ -67,36 +42,8 @@ export default function StudentInfoModal({ onSubmit, onClose }) {
           ✕
         </button>
         <h2 className="text-2xl font-bold text-white text-center">請輸入你的資訊</h2>
-        <label className="flex flex-col gap-1 text-sm text-sub">
-          班級
-          <input
-            required
-            value={className}
-            onChange={(e) => setClassName(e.target.value)}
-            placeholder="例如：高一忠班"
-            className="glass-input rounded-xl px-4 py-3 text-lg outline-none focus:border-glow"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-sub">
-          座號
-          <input
-            required
-            value={seatNumber}
-            onChange={(e) => setSeatNumber(e.target.value)}
-            placeholder="例如：12"
-            className="glass-input rounded-xl px-4 py-3 text-lg outline-none focus:border-glow"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm text-sub">
-          姓名
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="例如：王小明"
-            className="glass-input rounded-xl px-4 py-3 text-lg outline-none focus:border-glow"
-          />
-        </label>
+        <PurposeSelect value={purpose} onChange={setPurpose} />
+        <StudentFields value={student} onChange={setStudent} />
         <button
           type="submit"
           className="bg-glow hover:shadow-[0_0_20px_rgba(0,212,255,0.6)] text-ink rounded-xl px-4 py-3 text-lg font-bold transition-shadow"

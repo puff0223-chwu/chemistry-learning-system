@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import HeartDisplay from '../components/HeartDisplay.jsx'
+import BattleInfoModal from '../components/BattleInfoModal.jsx'
+import { createStudentSession, logBattleRound, newUuid } from '../lib/logs.js'
 
 const QUESTION_SECONDS = 180
 const MAX_HEARTS = 10
@@ -41,21 +43,28 @@ function formatTime(seconds) {
 }
 
 // Each player: unanswered or wrong -> lose 1 heart. Both correct -> only the slower one loses 1.
-function computeOutcome(correctAnswer, ansA, ansB) {
+function computeOutcome(correctAnswer, ansA, ansB, timedOut) {
   const okA = !!ansA && normalize(ansA.letter) === normalize(correctAnswer)
   const okB = !!ansB && normalize(ansB.letter) === normalize(correctAnswer)
   let lossA = okA ? 0 : 1
   let lossB = okB ? 0 : 1
   let fasterA = false
   let fasterB = false
+  let winner
+  if (okA && okB) winner = 'draw'
+  else if (okA) winner = 'A'
+  else if (okB) winner = 'B'
+  else winner = timedOut ? 'timeout' : 'both_wrong'
 
   if (okA && okB) {
     if (ansA.ts < ansB.ts) {
       lossB = 1
       fasterA = true
+      winner = 'A'
     } else if (ansB.ts < ansA.ts) {
       lossA = 1
       fasterB = true
+      winner = 'B'
     }
   }
 
@@ -72,6 +81,9 @@ function computeOutcome(correctAnswer, ansA, ansB) {
   return {
     lossA,
     lossB,
+    okA,
+    okB,
+    winner,
     resultA: describe(ansA, okA, lossA > 0, fasterA, okB),
     resultB: describe(ansB, okB, lossB > 0, fasterB, okA),
   }
@@ -322,14 +334,23 @@ export default function BattlePlay() {
   const [timeLeft, setTimeLeft] = useState(QUESTION_SECONDS)
   const [gameEnded, setGameEnded] = useState(false)
   const [restarting, setRestarting] = useState(false)
+  const [topic, setTopic] = useState(null)
+  const [players, setPlayers] = useState(null) // { purpose, playerA, playerB } once both players entered their info
+
+  const matchRef = useRef(null) // { battleUuid, sessionA, sessionB } for the match in progress
+  const roundStartRef = useRef(0)
 
   useEffect(() => {
     let active = true
     async function load() {
-      const { data, error: err } = await fetchPkQuestions(topicId)
+      const [{ data, error: err }, { data: topicData }] = await Promise.all([
+        fetchPkQuestions(topicId),
+        supabase.from('topics').select('id, name').eq('id', topicId).maybeSingle(),
+      ])
       if (!active) return
       if (err) setError(err.message)
       else setQuestions(shuffle(data ?? []))
+      setTopic(topicData ?? null)
       setLoading(false)
     }
     load()
@@ -338,29 +359,70 @@ export default function BattlePlay() {
     }
   }, [topicId])
 
+  // Every match gets its own battle uuid plus one student_sessions row per player.
+  function startMatchSessions(info) {
+    const battleUuid = newUuid()
+    const base = { mode: 'battle', purpose: info.purpose, topic, battleSessionUuid: battleUuid }
+    matchRef.current = {
+      battleUuid,
+      sessionA: createStudentSession({ ...base, student: info.playerA, playerRole: 'A' }),
+      sessionB: createStudentSession({ ...base, student: info.playerB, playerRole: 'B' }),
+    }
+  }
+
+  function beginMatch(info) {
+    startMatchSessions(info)
+    setPlayers(info)
+  }
+
+  // Each question restarts the answer stopwatch.
+  useEffect(() => {
+    roundStartRef.current = performance.now()
+  }, [qIndex, players, questions])
+
   const current = questions[qIndex] ?? null
   const isLastQuestion = qIndex >= questions.length - 1
   const nextEnabled = phase === 'revealed' && !isLastQuestion && heartsA > 0 && heartsB > 0
   const allAnswered = phase === 'revealed' && isLastQuestion
 
-  function settle(ansA, ansB) {
-    const result = computeOutcome(current.answer, ansA, ansB)
+  function settle(ansA, ansB, timedOut = false) {
+    const result = computeOutcome(current.answer, ansA, ansB, timedOut)
+    const hpA = Math.max(0, heartsA - result.lossA)
+    const hpB = Math.max(0, heartsB - result.lossB)
     setOutcome(result)
     setPhase('revealed')
-    setHeartsA((h) => Math.max(0, h - result.lossA))
-    setHeartsB((h) => Math.max(0, h - result.lossB))
+    setHeartsA(hpA)
+    setHeartsB(hpB)
+
+    const seconds = (ans) => (ans ? Math.round((ans.ts - roundStartRef.current) / 1000) : null)
+    logBattleRound({
+      battleSessionUuid: matchRef.current?.battleUuid,
+      sessionA: matchRef.current?.sessionA,
+      sessionB: matchRef.current?.sessionB,
+      questionId: current.id,
+      questionOrder: qIndex + 1,
+      answerA: ansA?.letter,
+      answerB: ansB?.letter,
+      correctA: result.okA,
+      correctB: result.okB,
+      timeA: seconds(ansA),
+      timeB: seconds(ansB),
+      hpA,
+      hpB,
+      winner: result.winner,
+    })
   }
 
   useEffect(() => {
-    if (gameEnded || phase !== 'answering' || !current) return
+    if (!players || gameEnded || phase !== 'answering' || !current) return
     if (timeLeft <= 0) {
-      settle(answerA, answerB)
+      settle(answerA, answerB, true)
       return
     }
     const timer = setTimeout(() => setTimeLeft((t) => t - 1), 1000)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, phase, gameEnded, current])
+  }, [timeLeft, phase, gameEnded, current, players])
 
   useEffect(() => {
     if (gameEnded || (heartsA > 0 && heartsB > 0)) return
@@ -397,6 +459,7 @@ export default function BattlePlay() {
     const { data, error: err } = await fetchPkQuestions(topicId)
     setQuestions(shuffle(err ? questions : (data ?? [])))
     setRestarting(false)
+    startMatchSessions(players)
     setQIndex(0)
     setHeartsA(MAX_HEARTS)
     setHeartsB(MAX_HEARTS)
@@ -429,6 +492,14 @@ export default function BattlePlay() {
             </button>
           </>
         )}
+      </div>
+    )
+  }
+
+  if (!players) {
+    return (
+      <div className="min-h-screen bg-cover bg-center" style={backgroundStyle}>
+        <BattleInfoModal onClose={exit} onSubmit={beginMatch} />
       </div>
     )
   }

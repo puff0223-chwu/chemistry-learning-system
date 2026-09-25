@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageBackground from '../components/PageBackground.jsx'
-import StudentInfoModal, { getStudentInfo } from '../components/StudentInfoModal.jsx'
+import StudentInfoModal from '../components/StudentInfoModal.jsx'
+import { getStudentInfo } from '../lib/studentInfo.js'
 import { supabase } from '../lib/supabase.js'
 
 export default function TaskSelect() {
@@ -53,7 +54,8 @@ export default function TaskSelect() {
 
         {studentInfo && (
           <p className="text-sub text-sm mb-4 text-center">
-            作答身分：{studentInfo.className} {studentInfo.seatNumber}號 {studentInfo.name}
+            作答身分：{studentInfo.purpose}・{studentInfo.grade} {studentInfo.className} {studentInfo.seatNumber}號{' '}
+            {studentInfo.name}
             <button
               type="button"
               onClick={() => setModal({ topicId: null })}

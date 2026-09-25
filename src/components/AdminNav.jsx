@@ -1,6 +1,20 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { adminSignOut } from '../lib/supabase.js'
 
+function NavLink({ to, active, current, children, indent }) {
+  const isActive = active === current
+  return (
+    <Link
+      to={to}
+      className={`block rounded-lg px-3 py-2 text-base whitespace-nowrap ${indent ? 'ml-4' : 'font-bold'} ${
+        isActive ? 'bg-[#00b4d8] text-white' : 'text-[#c9d6e6] hover:bg-[#2d4f7c] hover:text-white'
+      }`}
+    >
+      {children}
+    </Link>
+  )
+}
+
 export default function AdminNav({ active }) {
   const navigate = useNavigate()
 
@@ -10,29 +24,35 @@ export default function AdminNav({ active }) {
   }
 
   return (
-    <div className="w-full bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
-      <div className="flex gap-4">
-        <Link
-          to="/admin/topics"
-          className={`font-bold ${active === 'topics' ? 'text-cyan-dark' : 'text-slate-500 hover:text-navy'}`}
-        >
-          主題管理
-        </Link>
-        <Link
-          to="/admin/questions"
-          className={`font-bold ${active === 'questions' ? 'text-cyan-dark' : 'text-slate-500 hover:text-navy'}`}
-        >
-          題目管理
-        </Link>
-      </div>
-      <div className="flex items-center gap-4">
-        <Link to="/" className="text-slate-400 hover:text-navy text-sm">
+    <aside className="bg-navy text-white md:w-56 md:shrink-0 md:h-screen md:sticky md:top-0 p-4 flex md:flex-col gap-1 overflow-x-auto md:overflow-y-auto">
+      <p className="hidden md:block text-lg font-extrabold px-3 pb-3">🔬 教師後台</p>
+      <NavLink to="/admin/topics" active={active} current="topics">
+        主題管理
+      </NavLink>
+      <NavLink to="/admin/questions" active={active} current="questions">
+        題目管理
+      </NavLink>
+
+      <p className="hidden md:block text-sm text-[#9fb3cc] px-3 pt-4 pb-1">📊 學習資料</p>
+      <NavLink to="/admin/logs/task" active={active} current="task-logs" indent>
+        任務關卡資料
+      </NavLink>
+      <NavLink to="/admin/logs/battle" active={active} current="battle-logs" indent>
+        對戰資料
+      </NavLink>
+
+      <div className="md:mt-auto flex md:flex-col gap-1 md:pt-6">
+        <Link to="/" className="block rounded-lg px-3 py-2 text-sm text-[#9fb3cc] hover:text-white whitespace-nowrap">
           回首頁
         </Link>
-        <button type="button" onClick={handleLogout} className="text-slate-400 hover:text-navy text-sm">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="block text-left rounded-lg px-3 py-2 text-sm text-[#9fb3cc] hover:text-white whitespace-nowrap"
+        >
           登出
         </button>
       </div>
-    </div>
+    </aside>
   )
 }

@@ -114,9 +114,9 @@ export default function AdminQuestions() {
   }
 
   return (
-    <div className="min-h-screen bg-paper text-navy">
+    <div className="min-h-screen bg-paper text-navy md:flex">
       <AdminNav active="questions" />
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="flex-1 min-w-0 max-w-5xl mx-auto w-full px-6 py-8">
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <h1 className="text-2xl font-bold">題目管理</h1>
           <div className="flex items-center gap-3">

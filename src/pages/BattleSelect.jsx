@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageBackground from '../components/PageBackground.jsx'
-import StudentInfoModal, { getStudentInfo } from '../components/StudentInfoModal.jsx'
 import { supabase } from '../lib/supabase.js'
 
 export default function BattleSelect() {
@@ -9,8 +8,6 @@ export default function BattleSelect() {
   const [topics, setTopics] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [modal, setModal] = useState(null)
-  const [studentInfo, setStudentInfo] = useState(getStudentInfo)
 
   useEffect(() => {
     let active = true
@@ -29,14 +26,6 @@ export default function BattleSelect() {
     }
   }, [])
 
-  function handleSelectTopic(topicId) {
-    if (getStudentInfo()) {
-      navigate(`/battle/${topicId}`)
-    } else {
-      setModal({ topicId })
-    }
-  }
-
   return (
     <PageBackground image="/bg-battle.jpg.png">
       <div className="flex-1 px-6 py-10 max-w-4xl mx-auto w-full">
@@ -51,19 +40,6 @@ export default function BattleSelect() {
           <h1 className="text-2xl md:text-3xl font-bold text-white">選擇對戰主題</h1>
         </div>
 
-        {studentInfo && (
-          <p className="text-sub text-sm mb-4 text-center">
-            作答身分：{studentInfo.className} {studentInfo.seatNumber}號 {studentInfo.name}
-            <button
-              type="button"
-              onClick={() => setModal({ topicId: null })}
-              className="ml-3 text-xs text-white/50 hover:text-white/80 underline"
-            >
-              修改資訊
-            </button>
-          </p>
-        )}
-
         {loading && <p className="text-center text-sub">載入中...</p>}
         {error && <p className="text-center text-badglow">載入失敗：{error}</p>}
         {!loading && !error && topics.length === 0 && (
@@ -75,7 +51,7 @@ export default function BattleSelect() {
             <button
               key={topic.id}
               type="button"
-              onClick={() => handleSelectTopic(topic.id)}
+              onClick={() => navigate(`/battle/${topic.id}`)}
               className="glass-card glow-hover text-left rounded-2xl p-6"
               style={{ borderLeft: '4px solid #FFB800' }}
             >
@@ -85,21 +61,6 @@ export default function BattleSelect() {
           ))}
         </div>
       </div>
-
-      {modal && (
-        <StudentInfoModal
-          onClose={() => {
-            setModal(null)
-            setStudentInfo(getStudentInfo())
-          }}
-          onSubmit={(info) => {
-            const id = modal.topicId
-            setModal(null)
-            setStudentInfo(info)
-            if (id !== null) navigate(`/battle/${id}`)
-          }}
-        />
-      )}
     </PageBackground>
   )
 }

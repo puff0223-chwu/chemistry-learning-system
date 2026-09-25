@@ -65,9 +65,9 @@ export default function AdminTopics() {
   }
 
   return (
-    <div className="min-h-screen bg-paper text-navy">
+    <div className="min-h-screen bg-paper text-navy md:flex">
       <AdminNav active="topics" />
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="flex-1 min-w-0 max-w-4xl mx-auto w-full px-6 py-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">主題管理</h1>
           <button
