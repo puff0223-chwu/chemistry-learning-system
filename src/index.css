@@ -169,7 +169,8 @@ body {
   overflow-y: hidden;
 }
 
-/* Inside the rotated battle areas, keep images from crowding out the text. */
+/* Inside the rotated battle areas, keep images from crowding out the text. The area's short side is
+   the screen width, so the cap follows vw rather than vh. */
 .battle-rich img {
-  max-height: 16vh;
+  max-height: max(14vw, 90px);
 }

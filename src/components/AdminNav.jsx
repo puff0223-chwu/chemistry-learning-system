@@ -49,6 +49,9 @@ export default function AdminNav({ active }) {
       <NavLink to="/admin/appearance" active={active} current="appearance">
         🎨 外觀設定
       </NavLink>
+      <NavLink to="/admin/account" active={active} current="account">
+        ⚙️ 帳號設定
+      </NavLink>
 
       <div className="md:mt-auto flex md:flex-col gap-1 md:pt-6">
         <Link to="/" className="block rounded-lg px-3 py-2 text-sm text-[#9fb3cc] hover:text-white whitespace-nowrap">

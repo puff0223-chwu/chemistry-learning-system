@@ -36,9 +36,14 @@ npm run dev
 
 為了避免這個風險，老師後台改用 Supabase Auth 的帳號密碼登入：老師看到的畫面一樣只有「輸入密碼」，但背後會用一組固定 email（`VITE_ADMIN_EMAIL`）+ 密碼向 Supabase 登入，取得真正的 `authenticated`身份，這樣 RLS 政策才能正確地「只有登入者能寫入」。Secret key 只在建立這個登入帳號時使用一次，不會出現在任何程式碼或 `.env` 裡。
 
-若之後要更改老師密碼，需要同時：
-1. 修改 `.env`（或 Vercel 環境變數）裡的 `VITE_ADMIN_PASSWORD`
-2. 到 Supabase Dashboard → Authentication → Users，將該帳號的密碼改成一樣的值
+### 老師密碼
+
+密碼的真正儲存位置是 Supabase Auth，`VITE_ADMIN_PASSWORD` 只是當初建立帳號時的參考值，程式不會讀取它。
+
+- 修改密碼：登入後台 → 「⚙️ 帳號設定」→ 修改登入密碼。
+- 忘記密碼：登入頁按「忘記密碼？」，系統會寄重設信到帳號的 Email（所以該帳號的 Email 必須是能收信的真實信箱）。
+- 重設信的連結會回到 `/admin/reset-password`，這個網址必須加入 Supabase → Authentication → URL Configuration → **Redirect URLs**：
+  `https://chemistry-learning-system.vercel.app/admin/reset-password`
 
 ## 部署到 Vercel
 

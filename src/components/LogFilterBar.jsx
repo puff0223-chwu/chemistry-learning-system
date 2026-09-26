@@ -1,9 +1,11 @@
 import { GRADES, PURPOSES } from '../lib/studentInfo.js'
+import { DIFFICULTIES } from '../lib/questionMeta.js'
 
 const FIELD = 'flex flex-col gap-1 text-sm text-slate-600'
 const CONTROL = 'bg-white border border-slate-300 rounded-lg px-3 py-2 text-navy'
 
-export default function LogFilterBar({ filters, onChange, topics, onSearch, loading, nameHint }) {
+// `tags` (optional): when given, a tag filter is shown too.
+export default function LogFilterBar({ filters, onChange, topics, tags, onSearch, loading, nameHint }) {
   const set = (patch) => onChange({ ...filters, ...patch })
   return (
     <form
@@ -58,6 +60,30 @@ export default function LogFilterBar({ filters, onChange, topics, onSearch, load
           ))}
         </select>
       </label>
+      <label className={FIELD}>
+        題目難度
+        <select value={filters.difficulty} onChange={(e) => set({ difficulty: e.target.value })} className={CONTROL}>
+          <option value="">全部</option>
+          {DIFFICULTIES.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+      </label>
+      {tags && (
+        <label className={FIELD}>
+          題目標籤
+          <select value={filters.tagId} onChange={(e) => set({ tagId: e.target.value })} className={CONTROL}>
+            <option value="">全部</option>
+            {tags.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className={FIELD}>
         學生姓名（模糊搜尋）
         <input value={filters.studentName} onChange={(e) => set({ studentName: e.target.value })} className={CONTROL} />

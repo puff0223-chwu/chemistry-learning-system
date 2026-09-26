@@ -11,6 +11,8 @@ export const EMPTY_FILTERS = {
   className: '',
   topicId: '',
   studentName: '',
+  difficulty: '',
+  tagId: '',
 }
 
 export const EVENT_LABELS = {
@@ -70,6 +72,37 @@ function querySessions(mode, filters) {
   )
 }
 
+// Difficulty / tags live on questions; logs only carry question_id, so they're looked up separately.
+async function fetchQuestionInfo(ids, select = 'id, difficulty, content_tag_ids') {
+  const unique = [...new Set(ids.filter(Boolean))]
+  const rows = await fetchByChunks(unique, (part) =>
+    supabase.from('questions').select(select).in('id', part).order('id', { ascending: true }),
+  )
+  return new Map(rows.map((q) => [q.id, q]))
+}
+
+function matchesQuestionFilters(question, filters) {
+  if (filters.difficulty && question?.difficulty !== filters.difficulty) return false
+  if (filters.tagId && !(question?.content_tag_ids ?? []).includes(Number(filters.tagId))) return false
+  return true
+}
+
+export async function tagNameMap() {
+  const { data } = await supabase.from('tags').select('id, name')
+  return new Map((data ?? []).map((t) => [t.id, t.name]))
+}
+
+// Difficulty and tag names for one question, as shown in the reports and exported to Excel.
+export function describeQuestion(question, tagNames) {
+  return {
+    difficulty: question?.difficulty ?? '',
+    tags: (question?.content_tag_ids ?? []).map((id) => tagNames.get(id)).filter(Boolean).join(', '),
+  }
+}
+
+// Resolves to { rows: [{ session, logs }], questions: Map(question id -> question) }.
+// With a difficulty/tag filter, only sessions that touched matching questions are listed, and their
+// summary is computed from the matching questions' events (plus topic_complete, which is per session).
 export async function queryTaskData(filters) {
   const sessions = await querySessions('task', filters)
   const logs = await fetchByChunks(
@@ -87,7 +120,21 @@ export async function queryTaskData(filters) {
     if (!logsBySession.has(log.session_uuid)) logsBySession.set(log.session_uuid, [])
     logsBySession.get(log.session_uuid).push(log)
   }
-  return sessions.map((session) => ({ session, logs: logsBySession.get(session.session_uuid) ?? [] }))
+  const questions = await fetchQuestionInfo(logs.map((l) => l.question_id))
+
+  const filtering = !!(filters.difficulty || filters.tagId)
+  const rows = []
+  for (const session of sessions) {
+    let sessionLogs = logsBySession.get(session.session_uuid) ?? []
+    if (filtering) {
+      sessionLogs = sessionLogs.filter((l) =>
+        l.question_id == null ? l.event_type === 'topic_complete' : matchesQuestionFilters(questions.get(l.question_id), filters),
+      )
+      if (!sessionLogs.some((l) => l.question_id != null)) continue
+    }
+    rows.push({ session, logs: sessionLogs })
+  }
+  return { rows, questions }
 }
 
 // One row per battle. The filters match individual players; a battle is listed if either player matches.
@@ -104,18 +151,21 @@ export async function queryBattleData(filters) {
     ),
   ])
 
-  const questionIds = [...new Set(logs.map((l) => l.question_id).filter(Boolean))]
-  const questions = await fetchByChunks(questionIds, (part) =>
-    supabase.from('questions').select('id, content').in('id', part).order('id', { ascending: true }),
+  const questions = await fetchQuestionInfo(
+    logs.map((l) => l.question_id),
+    'id, content, difficulty, content_tag_ids',
   )
-  const questionContent = new Map(questions.map((q) => [q.id, q.content]))
 
   const battles = battleUuids.map((uuid) => {
     const players = sessions.filter((s) => s.battle_session_uuid === uuid)
     const rounds = logs
       .filter((l) => l.battle_session_uuid === uuid)
       .sort((a, b) => (a.question_order ?? 0) - (b.question_order ?? 0))
-      .map((l) => ({ ...l, questionContent: questionContent.get(l.question_id) ?? null }))
+      .map((l) => ({
+        ...l,
+        questionContent: questions.get(l.question_id)?.content ?? null,
+        question: questions.get(l.question_id) ?? null,
+      }))
     return {
       uuid,
       playerA: players.find((p) => p.player_role === 'A') ?? null,
@@ -123,7 +173,12 @@ export async function queryBattleData(filters) {
       rounds,
     }
   })
-  return battles.sort((a, b) => startedAt(b).localeCompare(startedAt(a)))
+  // A difficulty filter keeps whole battles that contain at least one matching question
+  // (cutting rounds out would distort the totals and the final HP).
+  const kept = filters.difficulty
+    ? battles.filter((b) => b.rounds.some((r) => r.question?.difficulty === filters.difficulty))
+    : battles
+  return kept.sort((a, b) => startedAt(b).localeCompare(startedAt(a)))
 }
 
 function startedAt(battle) {
@@ -134,8 +189,12 @@ function startedAt(battle) {
 
 const pct = (part, whole) => (whole ? `${Math.round((part / whole) * 1000) / 10}%` : '—')
 
-export function summarizeTask({ session, logs }) {
+export function summarizeTask({ session, logs }, questions = new Map()) {
   const questionKey = (l) => l.question_order ?? l.question_id
+  const difficulties = new Set(
+    logs.filter((l) => l.question_id != null).map((l) => questions.get(l.question_id)?.difficulty ?? '未設定'),
+  )
+  const difficulty = difficulties.size === 0 ? '—' : difficulties.size === 1 ? [...difficulties][0] : '混合'
   const answered = new Set(
     logs.filter((l) => l.event_type.startsWith('answer_') || l.event_type === 'help_requested').map(questionKey),
   )
@@ -151,6 +210,7 @@ export function summarizeTask({ session, logs }) {
     seat: session.seat_number,
     name: session.student_name,
     topic: session.topic_name ?? '（已刪除的主題）',
+    difficulty,
     answered: answered.size,
     correct: correct.size,
     rate: pct(correct.size, answered.size),
@@ -197,3 +257,21 @@ export function formatDateTime(iso) {
 }
 
 export const playerText = (p) => (p ? `${p.grade} ${p.class_name} ${p.seat_number}號 ${p.student_name}` : '（缺少資料）')
+
+// ---------- deletion ----------
+// Deleting student_sessions is enough: task_logs / battle_logs reference them ON DELETE CASCADE.
+
+async function deleteSessionsWhere(column, values) {
+  let deleted = 0
+  for (const part of chunk(values, IN_CHUNK)) {
+    const { data, error } = await supabase.from('student_sessions').delete().in(column, part).select('id')
+    if (error) throw error
+    deleted += data.length
+  }
+  return deleted
+}
+
+export const deleteTaskSessions = (sessionUuids) => deleteSessionsWhere('session_uuid', sessionUuids)
+
+// Both players' sessions of a battle share one battle_session_uuid.
+export const deleteBattles = (battleUuids) => deleteSessionsWhere('battle_session_uuid', battleUuids)

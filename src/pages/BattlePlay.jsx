@@ -106,7 +106,16 @@ function useFitText(ref, deps, max, min) {
     fit()
     const observer = new ResizeObserver(fit)
     observer.observe(el)
-    return () => observer.disconnect()
+    // Content that arrives after the first measurement (images, KaTeX web fonts) changes how much
+    // room the text needs without resizing the box, so measure again when it lands.
+    el.addEventListener('load', fit, true)
+    let active = true
+    document.fonts?.ready.then(() => active && fit())
+    return () => {
+      active = false
+      observer.disconnect()
+      el.removeEventListener('load', fit, true)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 }

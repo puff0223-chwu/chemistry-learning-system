@@ -20,6 +20,10 @@ export async function adminSignIn(email, password) {
   return data
 }
 
+// Where the link in the password-reset email lands. This exact URL must be listed under
+// Supabase → Authentication → URL Configuration → Redirect URLs, or Supabase refuses to redirect there.
+export const RESET_PASSWORD_URL = 'https://chemistry-learning-system.vercel.app/admin/reset-password'
+
 export async function adminSignOut() {
   await supabase.auth.signOut()
 }
