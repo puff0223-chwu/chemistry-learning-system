@@ -3,18 +3,19 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import HeartDisplay from '../components/HeartDisplay.jsx'
 import BattleInfoModal from '../components/BattleInfoModal.jsx'
+import RichContent from '../components/RichContent.jsx'
+import { useSettings } from '../lib/settings.jsx'
 import { createStudentSession, logBattleRound, newUuid } from '../lib/logs.js'
 
 const QUESTION_SECONDS = 180
 const MAX_HEARTS = 10
 const BAR_WIDTH = 80
-const BG_IMAGE = '/bg-battle.jpg.png'
 const OVERLAY = 'rgba(0, 10, 30, 0.8)'
 const DIVIDER = 'rgba(255, 255, 255, 0.2)'
 
 const GREEN_STYLE = { background: 'rgba(0, 230, 118, 0.25)', border: '1px solid #00E676' }
 const RED_STYLE = { background: 'rgba(255, 82, 82, 0.25)', border: '1px solid #FF5252' }
-const AMBER_STYLE = { background: 'rgba(255, 184, 0, 0.2)', border: '1px solid #FFB800' }
+const AMBER_STYLE = { background: 'rgb(var(--warning-rgb) / 0.2)', border: '1px solid var(--warning)' }
 
 function fetchPkQuestions(topicId) {
   return supabase
@@ -151,7 +152,7 @@ function ControlButtons({ onNext, onEnd, nextEnabled, endLit }) {
         disabled={!nextEnabled}
         className={`rounded-lg px-4 py-2 text-lg font-bold transition-all ${
           nextEnabled
-            ? 'bg-glow text-ink shadow-[0_0_16px_rgba(0,212,255,0.7)]'
+            ? 'bg-glow text-ink shadow-[0_0_16px_rgb(var(--accent-rgb)/0.7)]'
             : 'bg-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.3)] cursor-not-allowed'
         }`}
       >
@@ -162,7 +163,7 @@ function ControlButtons({ onNext, onEnd, nextEnabled, endLit }) {
         onClick={onEnd}
         className={`rounded-lg px-4 py-2 text-lg transition-all ${
           endLit
-            ? 'bg-warnglow text-ink font-bold shadow-[0_0_16px_rgba(255,184,0,0.7)]'
+            ? 'bg-warnglow text-ink font-bold shadow-[0_0_16px_rgb(var(--warning-rgb)/0.7)]'
             : 'text-[rgba(255,255,255,0.7)] hover:text-white border border-[rgba(255,255,255,0.3)]'
         }`}
       >
@@ -185,7 +186,7 @@ function OptionButton({ letter, text, style, cls, disabled, showLock, onClick })
       style={style}
     >
       <span className="font-bold text-glow">{letter}.</span>
-      <span className="flex-1">{text}</span>
+      <RichContent as="span" html={text} className="battle-rich flex-1 min-w-0" />
       {showLock && <span className="text-white/60">✓</span>}
     </button>
   )
@@ -195,9 +196,12 @@ function QuestionText({ text }) {
   const ref = useRef(null)
   useFitText(ref, [text], 22, 13)
   return (
-    <p ref={ref} className="font-bold text-center leading-snug overflow-y-auto min-h-0" style={{ maxHeight: '42%' }}>
-      {text}
-    </p>
+    <RichContent
+      ref={ref}
+      html={text}
+      className="battle-rich font-bold text-center leading-snug overflow-y-auto min-h-0"
+      style={{ maxHeight: '42%' }}
+    />
   )
 }
 
@@ -319,6 +323,7 @@ export default function BattlePlay() {
   const { topicId } = useParams()
   const navigate = useNavigate()
   const isWide = useIsWide()
+  const { settings } = useSettings()
 
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -474,7 +479,7 @@ export default function BattlePlay() {
   const endGame = () => setGameEnded(true)
   const controls = { onNext: nextQuestion, onEnd: endGame, nextEnabled, endLit: allAnswered }
   const exit = () => navigate('/battle')
-  const backgroundStyle = { backgroundImage: `linear-gradient(${OVERLAY}, ${OVERLAY}), url(${BG_IMAGE})` }
+  const backgroundStyle = { backgroundImage: `linear-gradient(${OVERLAY}, ${OVERLAY}), url("${settings.bg_battle}")` }
 
   if (loading || error || questions.length === 0) {
     return (

@@ -27,7 +27,7 @@ export default function BattleSelect() {
   }, [])
 
   return (
-    <PageBackground image="/bg-battle.jpg.png">
+    <PageBackground page="battle">
       <div className="flex-1 px-6 py-10 max-w-4xl mx-auto w-full">
         <div className="flex items-center justify-between mb-8">
           <button
@@ -53,7 +53,7 @@ export default function BattleSelect() {
               type="button"
               onClick={() => navigate(`/battle/${topic.id}`)}
               className="glass-card glow-hover text-left rounded-2xl p-6"
-              style={{ borderLeft: '4px solid #FFB800' }}
+              style={{ borderLeft: '4px solid var(--warning)' }}
             >
               <h3 className="text-xl font-bold text-white mb-2">{topic.name}</h3>
               {topic.description && <p className="text-sub text-sm leading-relaxed">{topic.description}</p>}

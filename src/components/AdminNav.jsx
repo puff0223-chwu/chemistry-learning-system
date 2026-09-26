@@ -33,12 +33,21 @@ export default function AdminNav({ active }) {
         題目管理
       </NavLink>
 
+      <NavLink to="/admin/tags" active={active} current="tags">
+        🏷️ 標籤管理
+      </NavLink>
+
       <p className="hidden md:block text-sm text-[#9fb3cc] px-3 pt-4 pb-1">📊 學習資料</p>
       <NavLink to="/admin/logs/task" active={active} current="task-logs" indent>
         任務關卡資料
       </NavLink>
       <NavLink to="/admin/logs/battle" active={active} current="battle-logs" indent>
         對戰資料
+      </NavLink>
+
+      <div className="hidden md:block h-3" />
+      <NavLink to="/admin/appearance" active={active} current="appearance">
+        🎨 外觀設定
       </NavLink>
 
       <div className="md:mt-auto flex md:flex-col gap-1 md:pt-6">

@@ -5,7 +5,7 @@ export default function Home() {
   const navigate = useNavigate()
 
   return (
-    <PageBackground image="/bg-home.jpg.png">
+    <PageBackground page="home">
       <div className="flex justify-between items-start px-6 py-5">
         <span className="text-white text-sm md:text-base font-bold">🔬 化學偵探學習系統</span>
         <button
@@ -33,7 +33,7 @@ export default function Home() {
             type="button"
             onClick={() => navigate('/task')}
             className="glass-card glow-hover rounded-2xl p-8 flex flex-col items-center gap-3 text-center"
-            style={{ borderBottom: '3px solid #00D4FF' }}
+            style={{ borderBottom: '3px solid var(--accent)' }}
           >
             <span className="text-5xl">🗺️</span>
             <span className="text-2xl font-bold text-white">任務關卡</span>
@@ -44,7 +44,7 @@ export default function Home() {
             type="button"
             onClick={() => navigate('/battle')}
             className="glass-card glow-hover rounded-2xl p-8 flex flex-col items-center gap-3 text-center"
-            style={{ borderBottom: '3px solid #FFB800' }}
+            style={{ borderBottom: '3px solid var(--warning)' }}
           >
             <span className="text-5xl">⚔️</span>
             <span className="text-2xl font-bold text-white">雙人對戰 PK</span>

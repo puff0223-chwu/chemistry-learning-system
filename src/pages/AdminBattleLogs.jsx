@@ -3,6 +3,7 @@ import AdminNav from '../components/AdminNav.jsx'
 import LogFilterBar from '../components/LogFilterBar.jsx'
 import { supabase } from '../lib/supabase.js'
 import { exportXlsx, todayStamp } from '../lib/exportExcel.js'
+import { htmlToText, truncate } from '../lib/richText.js'
 import {
   EMPTY_FILTERS,
   WINNER_LABELS,
@@ -15,7 +16,7 @@ import {
 const TH = 'py-2 px-3 text-left whitespace-nowrap font-bold text-slate-500 text-sm'
 const TD = 'py-2 px-3 whitespace-nowrap'
 const yesNo = (v) => (v === null || v === undefined ? '' : v ? '是' : '否')
-const snippet = (text) => (text ? (text.length > 30 ? `${text.slice(0, 30)}…` : text) : '（題目已刪除）')
+const snippet = (html) => (html ? truncate(htmlToText(html), 30) : '（題目已刪除）')
 
 function playerColumns(prefix, p) {
   return {
@@ -98,7 +99,7 @@ export default function AdminBattleLogs() {
         ...playerColumns('玩家B', s.playerB),
         題序: r.question_order ?? '',
         題目ID: r.question_id ?? '',
-        題目內容: r.questionContent ?? '',
+        題目內容: r.questionContent ? htmlToText(r.questionContent) : '',
         A的作答: r.player_a_answer ?? '',
         A是否答對: yesNo(r.player_a_correct),
         A答題秒數: r.player_a_time_seconds ?? '',

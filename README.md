@@ -26,7 +26,9 @@ npm run dev
 1. 到 Supabase 專案的 **SQL Editor**，貼上並執行 [`supabase/schema.sql`](supabase/schema.sql)，建立 `topics`、`questions` 兩張表與 RLS policies。
 2. 到 **Authentication → Users**，確認已建立老師登入帳號（Email 對應 `VITE_ADMIN_EMAIL`，密碼對應 `VITE_ADMIN_PASSWORD`）。
 3. 執行 [`supabase/logs.sql`](supabase/logs.sql) 建立學生使用紀錄的三張表（`student_sessions`、`task_logs`、`battle_logs`）與權限。學生端只能寫入，只有登入的老師能在「📊 學習資料」查詢與匯出。
-4. （可選）執行 [`supabase/seed.sql`](supabase/seed.sql) 插入示範資料，或直接透過老師後台新增。
+4. 執行 [`supabase/editor-upgrade.sql`](supabase/editor-upgrade.sql)：題目難度、內容標籤（`tags`）與外觀設定（`settings`）。
+5. 到 **Storage** 建立兩個 **public** bucket：`question-images`（題目圖片）、`site-backgrounds`（背景圖），再執行 [`supabase/storage.sql`](supabase/storage.sql) 開放登入的老師上傳。
+6. （可選）執行 [`supabase/seed.sql`](supabase/seed.sql) 插入示範資料，或直接透過老師後台新增。
 
 ### 為什麼老師後台用 Supabase Auth 登入，而不是規格書寫的「純前端密碼比對＋secret key」？
 

@@ -46,7 +46,7 @@ export default function StudentInfoModal({ onSubmit, onClose }) {
         <StudentFields value={student} onChange={setStudent} />
         <button
           type="submit"
-          className="bg-glow hover:shadow-[0_0_20px_rgba(0,212,255,0.6)] text-ink rounded-xl px-4 py-3 text-lg font-bold transition-shadow"
+          className="bg-glow hover:shadow-[0_0_20px_rgb(var(--accent-rgb)/0.6)] text-ink rounded-xl px-4 py-3 text-lg font-bold transition-shadow"
         >
           確認
         </button>

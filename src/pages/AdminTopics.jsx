@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import AdminNav from '../components/AdminNav.jsx'
+import RichTextEditor from '../components/RichTextEditor.jsx'
 import { supabase } from '../lib/supabase.js'
 
 const EMPTY_FORM = { name: '', description: '', story_context: '', character_intro: '' }
@@ -11,6 +12,7 @@ export default function AdminTopics() {
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [showForm, setShowForm] = useState(false)
+  const [formKey, setFormKey] = useState(0)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
   async function loadTopics() {
@@ -26,12 +28,14 @@ export default function AdminTopics() {
   }, [])
 
   function openCreateForm() {
+    setFormKey((k) => k + 1)
     setEditingId(null)
     setForm(EMPTY_FORM)
     setShowForm(true)
   }
 
   function openEditForm(topic) {
+    setFormKey((k) => k + 1)
     setEditingId(topic.id)
     setForm({
       name: topic.name ?? '',
@@ -132,7 +136,7 @@ export default function AdminTopics() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center px-4 z-50">
           <form
             onSubmit={handleSubmit}
-            className="bg-white rounded-2xl p-6 w-full max-w-lg flex flex-col gap-4 max-h-[90vh] overflow-y-auto shadow-xl"
+            className="bg-white rounded-2xl p-6 w-full max-w-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto shadow-xl"
           >
             <h2 className="text-xl font-bold">{editingId ? '編輯主題' : '新增主題'}</h2>
             <label className="flex flex-col gap-1 text-sm">
@@ -153,15 +157,15 @@ export default function AdminTopics() {
                 rows={2}
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <div className="flex flex-col gap-1 text-sm">
               故事情境（story_context）
-              <textarea
+              <RichTextEditor
+                key={`story-${formKey}`}
                 value={form.story_context}
-                onChange={(e) => setForm({ ...form, story_context: e.target.value })}
-                className="bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-navy"
-                rows={3}
+                onChange={(v) => setForm((prev) => ({ ...prev, story_context: v }))}
+                minHeight={90}
               />
-            </label>
+            </div>
             <label className="flex flex-col gap-1 text-sm">
               角色介紹（character_intro）
               <input

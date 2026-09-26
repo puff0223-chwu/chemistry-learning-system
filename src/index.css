@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+/* Theme colors. The 外觀設定 page overwrites these at runtime (see lib/settings.jsx). */
+:root {
+  --accent: #00d4ff;
+  --accent-rgb: 0 212 255;
+  --warning: #ffb800;
+  --warning-rgb: 255 184 0;
+}
+
 html, body, #root {
   height: 100%;
 }
@@ -18,7 +26,7 @@ body {
 
 .glass-card {
   background: rgba(0, 20, 50, 0.75);
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  border: 1px solid rgb(var(--accent-rgb) / 0.3);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -46,8 +54,8 @@ body {
 
 .glow-hover:hover {
   transform: translateY(-4px);
-  box-shadow: 0 0 24px rgba(0, 212, 255, 0.35);
-  border-color: rgba(0, 212, 255, 0.7);
+  box-shadow: 0 0 24px rgb(var(--accent-rgb) / 0.35);
+  border-color: rgb(var(--accent-rgb) / 0.7);
 }
 
 .page-fade {
@@ -91,4 +99,77 @@ body {
     transform: scale(0);
     opacity: 0;
   }
+}
+
+/* Rich text editor (admin). Dark surface = what students see, so chosen text colors are WYSIWYG. */
+.rte-surface {
+  background: #0d2340;
+  color: #ffffff;
+}
+
+.rte-content {
+  padding: 10px 12px;
+  outline: none;
+  line-height: 1.6;
+  font-size: 18px;
+}
+
+.rte-content p {
+  margin: 0 0 0.4em;
+}
+
+.rte-content p:last-child {
+  margin-bottom: 0;
+}
+
+.rte-content img {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
+.rte-content img.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+}
+
+.rte-content .math-node {
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 4px;
+}
+
+.rte-content .math-node:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Student-facing rich content (TaskPlay / BattlePlay). Scoped so it can't leak into other styles. */
+.rich-content p {
+  margin: 0;
+}
+
+.rich-content p + p {
+  margin-top: 0.4em;
+}
+
+.rich-content img {
+  max-width: 100%;
+  max-height: 40vh;
+  height: auto;
+  vertical-align: middle;
+}
+
+.rich-content a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.rich-content .math-display {
+  display: block;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Inside the rotated battle areas, keep images from crowding out the text. */
+.battle-rich img {
+  max-height: 16vh;
 }

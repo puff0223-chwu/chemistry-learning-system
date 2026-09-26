@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PageBackground from '../components/PageBackground.jsx'
 import StudentInfoModal from '../components/StudentInfoModal.jsx'
+import RichContent from '../components/RichContent.jsx'
 import { supabase } from '../lib/supabase.js'
 import { getStudentInfo } from '../lib/studentInfo.js'
 import { createStudentSession, logTaskEvent } from '../lib/logs.js'
@@ -143,7 +144,7 @@ export default function TaskPlay() {
 
   if (!info) {
     return (
-      <PageBackground image="/bg-task.jpg.png">
+      <PageBackground page="task">
         <StudentInfoModal onClose={() => navigate('/task')} onSubmit={setInfo} />
       </PageBackground>
     )
@@ -151,7 +152,7 @@ export default function TaskPlay() {
 
   if (loading) {
     return (
-      <PageBackground image="/bg-task.jpg.png">
+      <PageBackground page="task">
         <div className="flex-1 flex items-center justify-center text-xl text-white">載入題目中...</div>
       </PageBackground>
     )
@@ -159,7 +160,7 @@ export default function TaskPlay() {
 
   if (error) {
     return (
-      <PageBackground image="/bg-task.jpg.png">
+      <PageBackground page="task">
         <div className="flex-1 flex items-center justify-center text-badglow text-xl">載入失敗：{error}</div>
       </PageBackground>
     )
@@ -167,7 +168,7 @@ export default function TaskPlay() {
 
   if (questions.length === 0) {
     return (
-      <PageBackground image="/bg-task.jpg.png">
+      <PageBackground page="task">
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
           <p className="text-xl text-white">這個主題還沒有任務題目。</p>
           <button
@@ -184,7 +185,7 @@ export default function TaskPlay() {
 
   if (isFinished) {
     return (
-      <PageBackground image="/bg-task.jpg.png">
+      <PageBackground page="task">
         <div className="flex-1 flex flex-col items-center justify-center gap-6 text-center px-6">
           <h1 className="text-4xl font-extrabold text-white">🎉 通關成功！</h1>
           <p className="text-lg text-sub">你已完成「{topic?.name}」的所有任務題目</p>
@@ -201,7 +202,7 @@ export default function TaskPlay() {
   }
 
   return (
-    <PageBackground image="/bg-task.jpg.png">
+    <PageBackground page="task">
       <div className="flex-1 px-4 md:px-8 py-8 max-w-2xl mx-auto w-full flex flex-col gap-6">
         <div className="flex items-center justify-between gap-4">
           <button
@@ -226,16 +227,16 @@ export default function TaskPlay() {
         </div>
 
         {topic && (topic.story_context || topic.character_intro) && (
-          <div className="glass-card rounded-2xl p-5" style={{ borderLeft: '4px solid #00D4FF' }}>
+          <div className="glass-card rounded-2xl p-5" style={{ borderLeft: '4px solid var(--accent)' }}>
             <p className="text-xs font-bold text-glow mb-2">📋 案件情境</p>
             {topic.character_intro && <p className="text-white font-bold mb-2">{topic.character_intro}</p>}
-            {topic.story_context && <p className="text-sub leading-relaxed">{topic.story_context}</p>}
+            {topic.story_context && <RichContent html={topic.story_context} className="text-sub leading-relaxed" />}
           </div>
         )}
 
         <div className="glass-card rounded-2xl p-6">
           <p className="text-xs font-bold text-glow mb-2">❓ 題目</p>
-          <p className="text-xl font-bold text-white mb-6">{current.content}</p>
+          <RichContent html={current.content} className="text-xl font-bold text-white mb-6" />
 
           {status !== 'gaveUp' && current.type === 'choice' && (
             <div className="grid grid-cols-1 gap-3">
@@ -259,11 +260,11 @@ export default function TaskPlay() {
                     type="button"
                     disabled={status !== 'answering'}
                     onClick={() => handleChoiceAnswer(letter)}
-                    className={`text-left rounded-xl px-5 py-4 text-lg transition-colors ${stateClasses}`}
+                    className={`flex items-baseline gap-1 text-left rounded-xl px-5 py-4 text-lg transition-colors ${stateClasses}`}
                     style={stateStyle}
                   >
-                    <span className="font-bold text-glow mr-2">{letter}.</span>
-                    {text}
+                    <span className="font-bold text-glow mr-2 shrink-0">{letter}.</span>
+                    <RichContent as="span" html={text} className="min-w-0" />
                   </button>
                 )
               })}
@@ -302,12 +303,12 @@ export default function TaskPlay() {
               {hintText && (
                 <div
                   className="rounded-xl p-4 flex items-start gap-3"
-                  style={{ background: 'rgba(255, 184, 0, 0.18)', border: '1px solid rgba(255, 184, 0, 0.5)' }}
+                  style={{ background: 'rgb(var(--warning-rgb) / 0.18)', border: '1px solid rgb(var(--warning-rgb) / 0.5)' }}
                 >
                   <span className="text-2xl leading-none">💡</span>
                   <div>
                     <p className="text-xs font-bold text-warnglow mb-1">提示</p>
-                    <p className="text-white leading-relaxed">{hintText}</p>
+                    <RichContent html={hintText} className="text-white leading-relaxed" />
                   </div>
                 </div>
               )}
@@ -350,7 +351,7 @@ export default function TaskPlay() {
                 <span className="text-2xl leading-none">📖</span>
                 <div className="text-white leading-relaxed">
                   <p className="font-bold mb-1">正確答案：{current.answer}</p>
-                  {current.explanation && <p>{current.explanation}</p>}
+                  {current.explanation && <RichContent html={current.explanation} />}
                 </div>
               </div>
               <button

@@ -55,7 +55,7 @@ export default function BattleInfoModal({ onSubmit, onClose }) {
 
         <button
           type="submit"
-          className="bg-glow hover:shadow-[0_0_20px_rgba(0,212,255,0.6)] text-ink rounded-xl px-4 py-3 text-lg font-bold transition-shadow max-w-sm w-full self-center"
+          className="bg-glow hover:shadow-[0_0_20px_rgb(var(--accent-rgb)/0.6)] text-ink rounded-xl px-4 py-3 text-lg font-bold transition-shadow max-w-sm w-full self-center"
         >
           開始對戰
         </button>

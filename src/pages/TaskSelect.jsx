@@ -39,7 +39,7 @@ export default function TaskSelect() {
   }
 
   return (
-    <PageBackground image="/bg-task.jpg.png">
+    <PageBackground page="task">
       <div className="flex-1 px-6 py-10 max-w-4xl mx-auto w-full">
         <div className="flex items-center justify-between mb-8">
           <button
@@ -79,7 +79,7 @@ export default function TaskSelect() {
               type="button"
               onClick={() => handleSelectTopic(topic.id)}
               className="glass-card glow-hover text-left rounded-2xl p-6"
-              style={{ borderLeft: '4px solid #00D4FF' }}
+              style={{ borderLeft: '4px solid var(--accent)' }}
             >
               <h3 className="text-xl font-bold text-white mb-2">{topic.name}</h3>
               {topic.description && <p className="text-sub text-sm leading-relaxed">{topic.description}</p>}
