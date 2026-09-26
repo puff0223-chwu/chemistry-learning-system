@@ -9,7 +9,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-export const DEFAULT_ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'teacher@chemistry-learning-system.local'
+// Prefilled on the login form. Fixed in code on purpose: a VITE_ADMIN_EMAIL variable on the host would
+// silently override it, and it has to match the email of the Supabase Auth account (also used for reset mail).
+export const DEFAULT_ADMIN_EMAIL = 'puff0223@gmail.com'
 
 export async function adminSignIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({
