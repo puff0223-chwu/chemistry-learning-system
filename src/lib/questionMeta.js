@@ -1,4 +1,4 @@
-export const TYPE_LABEL = { choice: '單選題', fill: '非選填答題' }
+export const TYPE_LABEL = { choice: '單選題', fill: '填答題' }
 export const MODE_LABEL = { task: '任務', pk: 'PK', both: '任務 + PK' }
 export const DIFFICULTIES = ['基礎', '進階', '挑戰']
 

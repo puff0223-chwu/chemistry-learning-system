@@ -91,7 +91,7 @@ export default function AdminQuestions() {
     if (nextFilters.type) query = query.eq('type', nextFilters.type)
     if (nextFilters.difficulty === NO_DIFFICULTY) query = query.is('difficulty', null)
     else if (nextFilters.difficulty) query = query.eq('difficulty', nextFilters.difficulty)
-    if (nextFilters.tagIds.length) query = query.contains('content_tag_ids', nextFilters.tagIds)
+    if (nextFilters.tagIds.length) query = query.overlaps('content_tag_ids', nextFilters.tagIds)
     const keyword = nextFilters.keyword.trim().replace(/[\\%_]/g, (c) => `\\${c}`)
     if (keyword) query = query.ilike('content', `%${keyword}%`)
     const from = pageNum * PAGE_SIZE
@@ -269,7 +269,7 @@ export default function AdminQuestions() {
             </label>
           </div>
           <div className={FIELD}>
-            內容標籤（選多個時，題目需同時具備）
+            內容標籤（選多個時，符合任一個即可）
             <TagChips
               tags={tags}
               selected={filters.tagIds}
