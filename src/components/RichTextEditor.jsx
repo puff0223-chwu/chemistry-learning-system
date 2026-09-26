@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Color, FontSize, TextStyle } from '@tiptap/extension-text-style'
@@ -108,13 +108,16 @@ export default function RichTextEditor({ value, onChange, minHeight = 96 }) {
         return true
       },
     },
-    onCreate: ({ editor: created }) => {
-      editorRef.current = created
-    },
     onUpdate: ({ editor: updated }) => {
       onChange(updated.isEmpty ? '' : updated.getHTML())
     },
   })
+
+  // Uploads finish asynchronously, so they insert through this ref. It must track the live editor
+  // (StrictMode creates and discards one), not whichever instance fired onCreate first.
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
 
   const state = useEditorState({
     editor,
