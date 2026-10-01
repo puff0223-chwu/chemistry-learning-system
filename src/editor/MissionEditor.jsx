@@ -267,18 +267,18 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
 
   return (
     <div className="h-screen flex flex-col bg-paper text-navy overflow-hidden">
-      <header className="bg-navy text-white px-4 py-2 flex items-center gap-x-3 gap-y-1 flex-wrap shrink-0 [&_button]:whitespace-nowrap">
+      <header className="bg-navy text-white px-4 py-2 flex items-center gap-x-2 gap-y-1 flex-wrap shrink-0 [&_button]:whitespace-nowrap">
         <button type="button" onClick={handleBack} className="text-sm text-[#c9d6e6] hover:text-white whitespace-nowrap">
-          ← 回任務列表
+          ← 返回
         </button>
-        <h1 className="font-bold truncate max-w-xs" title={title}>
+        <h1 className="font-bold truncate max-w-[9rem]" title={title}>
           {title}
         </h1>
         <div className="flex rounded-lg overflow-hidden border border-white/30 ml-2 text-sm">
           {[
             ['canvas', '🎨 畫布'],
-            ['graph', '🗺️ 場景關聯圖'],
-            ...(multiStage ? [['stages', '🧭 關卡地圖']] : []),
+            ['graph', '🗺️ 場景圖'],
+            ...(multiStage ? [['stages', '🧭 關卡圖']] : []),
           ].map(([key, label]) => (
             <button key={key} type="button" onClick={() => setView(key)} className={`px-3 py-1 ${view === key ? 'bg-cyan text-white' : 'hover:bg-white/10'}`}>
               {label}
@@ -295,14 +295,14 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
         </div>
         {multiStage ? (
           <label className="flex items-center gap-1 text-sm" title="目前正在編輯哪一關">
-            <span className="text-[#c9d6e6]">編輯：</span>
+            <span className="text-[#c9d6e6]">關卡：</span>
             <select
               value={stage.stageId}
               onChange={(e) => {
                 actions.selectStage(e.target.value)
                 if (view === 'stages') setView('canvas')
               }}
-              className="bg-white/10 rounded px-2 py-1 max-w-[10rem]"
+              className="bg-white/10 rounded px-2 py-1 max-w-[8rem]"
             >
               {draft.stages.map((st) => (
                 <option key={st.stageId} value={st.stageId} className="text-navy">
@@ -337,7 +337,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
             🏁 關卡設定
           </button>
           <button type="button" onClick={() => setFlagsOpen(true)} title="學生做過的事（記號）一覽，可改名" className="px-2 py-1 rounded hover:bg-white/10 text-sm">
-            📌 進度記號{usage.size ? ` (${usage.size})` : ''}
+            📌 記號{usage.size ? ` (${usage.size})` : ''}
           </button>
         </div>
         {view === 'canvas' && (
@@ -354,7 +354,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           ▶ 試玩
         </button>
         <details className="relative text-sm" onMouseLeave={(e) => e.currentTarget.removeAttribute('open')}>
-          <summary className="cursor-pointer list-none px-2 py-1 rounded hover:bg-white/10 text-[#c9d6e6]">⋯ 更多</summary>
+          <summary className="cursor-pointer list-none px-2 py-1 rounded hover:bg-white/10 text-[#c9d6e6]">⋯</summary>
           <div className="absolute right-0 top-full mt-1 z-30 bg-white text-navy rounded-lg shadow-lg p-1 w-44 flex flex-col">
             <button type="button" onClick={exportJson} className="text-left px-3 py-2 rounded hover:bg-slate-100">
               ⬇ 匯出備份檔
