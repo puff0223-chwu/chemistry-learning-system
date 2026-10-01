@@ -1,4 +1,6 @@
-export default function ConfirmDialog({ title, message, confirmText = '確定', busy, error, children, onConfirm, onCancel }) {
+const DANGER = 'bg-red-600 hover:bg-red-500'
+
+export default function ConfirmDialog({ title, message, confirmText = '確定', confirmClass = DANGER, busyText = '刪除中...', busy, error, children, onConfirm, onCancel }) {
   return (
     <div className="fixed inset-0 flex items-center justify-center px-4 z-50" style={{ backgroundColor: 'rgba(0, 10, 30, 0.6)' }}>
       <div className="bg-white text-navy rounded-2xl p-6 w-full max-w-md flex flex-col gap-4 shadow-xl">
@@ -14,9 +16,9 @@ export default function ConfirmDialog({ title, message, confirmText = '確定', 
             type="button"
             disabled={busy}
             onClick={onConfirm}
-            className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl px-4 py-2 font-bold"
+            className={`${confirmClass} disabled:opacity-50 text-white rounded-xl px-4 py-2 font-bold`}
           >
-            {busy ? '刪除中...' : confirmText}
+            {busy ? busyText : confirmText}
           </button>
         </div>
       </div>

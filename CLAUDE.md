@@ -49,7 +49,7 @@
 5. 回報後停下，等老師確認再合併 main、再進下一階段。
 
 ## 目前階段
-舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。**下一步：第 3 階段「畫布編輯器核心」**。詳見 `docs/PROGRESS.md`。
+舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。第 3 階段「畫布編輯器核心」已開發完成（分支 `phase-3-editor`，**不需要新的 SQL**），**等老師實測後才合併 main**；合併後下一步是第 4 階段「播放器核心＋事件系統」。詳見 `docs/PROGRESS.md`。
 
 
 
@@ -57,4 +57,5 @@
 - `supabase/phase1-missions.sql`：任務系統資料表、RLS、檢視表 `published_missions`、bucket `mission-assets`。
 - `src/lib/missions.js`：任務 CRUD、空任務 JSON 骨架；學生端只能讀 `published_missions` 檢視表，不可直接讀 `missions` 表。
 - `src/lib/assets.js`：素材上傳（WebP 壓縮、雜湊檔名）、用量、使用中檢查、刪除。**任務 JSON 引用素材一律用 `mission_assets.id` 當 `assetId`**（刪除保護靠它比對）。`supabase/phase2-assets.sql`：`name` 欄位與 `mission_assets_in_use` 函式。
-- 網址：學生 `/missions`；後台素材庫 `/admin/assets`；後台 `/admin/missions`、`/admin/mission-categories`；舊版 `/task`、`/battle` 不變。
+- 編輯器：`src/pages/AdminMissionEditor.jsx`（讀寫 Supabase）→ `src/editor/MissionEditor.jsx`（全螢幕外殼，不碰 Supabase，由 props 傳入草稿、素材、存檔函式）；狀態／復原／自動存檔在 `useMissionEditor.js`；`SceneView.jsx` 以 DOM 繪製場景（播放器要共用它），`SceneCanvas.jsx` 疊 Konva 透明層做互動；`SceneGraph.jsx` 是 react-flow 場景關聯圖。任務 JSON 的結構與預設值在 `src/lib/missionSchema.js`（物件陣列順序＝圖層順序，最後＝最上層）。
+- 網址：學生 `/missions`；後台編輯器 `/admin/missions/:id/edit`；後台素材庫 `/admin/assets`；後台 `/admin/missions`、`/admin/mission-categories`；舊版 `/task`、`/battle` 不變。

@@ -28,6 +28,7 @@ export function formatBytes(bytes) {
 }
 
 export function assetUrl(path) {
+  if (/^(https?:|data:|\/)/.test(path)) return path // already a full URL (e.g. imported or external)
   return supabase.storage.from(ASSET_BUCKET).getPublicUrl(path).data.publicUrl
 }
 
@@ -201,4 +202,29 @@ export async function deleteAssets(assets) {
   if (storageError) throw storageError
   const { error } = await supabase.from('mission_assets').delete().in('id', assets.map((a) => a.id))
   if (error) throw error
+}
+
+// Everything the editor can place: this mission's assets, shared assets, and any asset the draft already
+// references (a duplicated mission still points at the original mission's files).
+export async function fetchEditorAssets(missionId, referencedIds = []) {
+  const rows = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('mission_assets')
+      .select('*')
+      .or(`mission_id.is.null,mission_id.eq.${missionId}`)
+      .order('created_at', { ascending: false })
+      .range(from, from + 999)
+    if (error) throw error
+    rows.push(...data)
+    if (data.length < 1000) break
+  }
+  const known = new Set(rows.map((r) => r.id))
+  const missing = referencedIds.filter((id) => !known.has(id))
+  if (missing.length > 0) {
+    const { data, error } = await supabase.from('mission_assets').select('*').in('id', missing)
+    if (error) throw error
+    rows.push(...data)
+  }
+  return rows
 }

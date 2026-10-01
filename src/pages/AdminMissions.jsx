@@ -206,7 +206,7 @@ export default function AdminMissions() {
           </button>
         </div>
         <p className="text-slate-600 text-sm">
-          一個任務就是一個完整的小遊戲。新增後是「草稿」，學生看不到；編輯器與發布功能會在後續階段開放。
+          一個任務就是一個完整的小遊戲。新增後是「草稿」，學生看不到；按「編輯內容」進入場景編輯器，發布功能會在後續階段開放。
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -253,6 +253,9 @@ export default function AdminMissions() {
                 最後修改：{formatTime(m.updated_at)}
               </p>
               <div className="flex flex-wrap gap-2">
+                <Link to={`/admin/missions/${m.id}/edit`} className="bg-cyan hover:bg-cyan-dark text-white rounded-lg px-3 py-1.5 text-sm font-bold">
+                  ✏️ 編輯內容
+                </Link>
                 <button
                   type="button"
                   onClick={() => {
@@ -261,7 +264,7 @@ export default function AdminMissions() {
                   }}
                   className="bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 text-sm"
                 >
-                  編輯名稱／分類
+                  名稱／分類
                 </button>
                 <button
                   type="button"
