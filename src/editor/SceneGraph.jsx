@@ -68,6 +68,7 @@ const nodeTypes = { scene: SceneNode }
 
 function Graph({ scenes, startSceneId, currentSceneId, assets, onOpenScene, onConnectExit, onClearExit, onMoveScene, onAddScene, onAutoLayout }) {
   const [alsoReturn, setAlsoReturn] = useState(true)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [nodes, setNodes] = useState([])
   const { fitView } = useReactFlow()
 
@@ -106,7 +107,7 @@ function Graph({ scenes, startSceneId, currentSceneId, assets, onOpenScene, onCo
 
   function arrange() {
     onAutoLayout()
-    setTimeout(() => fitView({ duration: 300, padding: 0.2 }), 350)
+    setTimeout(() => fitView({ duration: 300, padding: 0.25 }), 350)
   }
 
   return (
@@ -116,6 +117,7 @@ function Graph({ scenes, startSceneId, currentSceneId, assets, onOpenScene, onCo
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
+        fitViewOptions={{ padding: 0.25 }}
         deleteKeyCode={['Backspace', 'Delete']}
         onNodesChange={(changes) => setNodes((prev) => applyNodeChanges(changes, prev))}
         onNodeDragStop={(_, node) => onMoveScene(node.id, { x: Math.round(node.position.x), y: Math.round(node.position.y) })}
@@ -132,25 +134,39 @@ function Graph({ scenes, startSceneId, currentSceneId, assets, onOpenScene, onCo
         <Controls showInteractive={false} />
       </ReactFlow>
 
-      <div className="absolute top-3 left-3 bg-white/95 border border-slate-200 rounded-xl p-3 text-sm shadow max-w-xs flex flex-col gap-2">
-        <p className="font-bold">場景關聯圖</p>
-        <p className="text-slate-600 leading-relaxed">
-          每個場景四周有標了方向的圓點（→ ← ↑ ↓，斜的 ↗ 是「前」、↙ 是「後」）。
-          <b>從某個方向的圓點，拖到另一個場景</b>，就建立那個方向的出口。
-        </p>
-        <p className="text-slate-500 text-xs leading-relaxed">點一條箭頭再按 Delete 可以刪掉出口；連點兩下場景進入編輯；拖動場景可以改位置。</p>
-        <label className="flex items-center gap-2 text-slate-700">
-          <input type="checkbox" checked={alsoReturn} onChange={(e) => setAlsoReturn(e.target.checked)} />
-          同時建立「走回來」的出口
-        </label>
-        <div className="flex gap-2">
-          <button type="button" onClick={onAddScene} className="flex-1 bg-cyan hover:bg-cyan-dark text-white rounded-lg px-3 py-1.5 font-bold">
+      {/* A slim toolbar instead of a big card, so the canvas stays free. The how-to is one tap away under ❓. */}
+      <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1.5">
+        <div className="flex items-center gap-1.5 bg-white/95 border border-slate-200 rounded-xl shadow px-1.5 py-1 text-sm">
+          <button type="button" onClick={onAddScene} className="bg-cyan hover:bg-cyan-dark text-white rounded-lg px-3 py-1 font-bold whitespace-nowrap">
             ＋ 新增場景
           </button>
-          <button type="button" onClick={arrange} title="依照出口的方向，把場景排整齊" className="flex-1 bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 font-bold">
+          <button type="button" onClick={arrange} title="依照出口的方向，把場景排整齊" className="bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1 font-bold whitespace-nowrap">
             🧹 自動整理
           </button>
+          <label className="flex items-center gap-1.5 px-1.5 text-slate-700 whitespace-nowrap cursor-pointer" title="建立出口時，同時在對面建立走回來的出口">
+            <input type="checkbox" checked={alsoReturn} onChange={(e) => setAlsoReturn(e.target.checked)} />
+            同時建立走回來的出口
+          </label>
+          <button type="button" onClick={() => setHelpOpen((o) => !o)} aria-label="怎麼用" aria-expanded={helpOpen} className={`w-8 h-8 rounded-lg font-bold ${helpOpen ? 'bg-navy text-white' : 'bg-slate-100 hover:bg-slate-200'}`}>
+            ？
+          </button>
         </div>
+        {helpOpen && (
+          <div className="bg-white border border-slate-200 rounded-xl shadow-lg p-3 text-sm w-80 leading-relaxed">
+            <p className="font-bold mb-1">怎麼連出口？</p>
+            <p className="text-slate-700">
+              每個場景四周有標了方向的圓點（→ ← ↑ ↓，斜的 ↗ 是「前」、↙ 是「後」）。<b>從某個方向的圓點，拖到另一個場景</b>，就建立那個方向的出口。
+            </p>
+            <ul className="text-slate-500 text-xs mt-2 list-disc ml-4 flex flex-col gap-0.5">
+              <li>點一條箭頭，再按 Delete，可以刪掉那個出口</li>
+              <li>連點兩下場景，進入編輯</li>
+              <li>拖動場景可以改位置，或按「自動整理」</li>
+            </ul>
+            <button type="button" onClick={() => setHelpOpen(false)} className="mt-2 text-xs text-cyan-dark underline">
+              知道了
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
