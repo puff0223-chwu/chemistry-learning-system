@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import MissionEditor from '../editor/MissionEditor.jsx'
 import { fetchEditorAssets, uploadAsset } from '../lib/assets.js'
+import { checkMission } from '../lib/missionCheck.js'
+import { publishMission } from '../lib/missions.js'
 import { collectAssetIds, normalizeDraft } from '../lib/missionSchema.js'
 import { supabase } from '../lib/supabase.js'
 
@@ -39,6 +41,19 @@ export default function AdminMissionEditor() {
   )
   const upload = useCallback((file) => uploadAsset(file, missionId), [missionId])
 
+  // Which assets referenced by the draft still exist, then the health check.
+  const check = useCallback(async (draft) => {
+    const ids = collectAssetIds(draft)
+    const existing = new Set()
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data, error } = await supabase.from('mission_assets').select('id').in('id', ids.slice(i, i + 100))
+      if (error) throw error
+      data.forEach((r) => existing.add(r.id))
+    }
+    return checkMission(draft, existing)
+  }, [])
+  const publish = useCallback(() => publishMission(missionId), [missionId])
+
   if (state.phase === 'loading') {
     return <div className="min-h-screen flex items-center justify-center bg-paper text-navy text-xl">載入任務中...</div>
   }
@@ -61,6 +76,8 @@ export default function AdminMissionEditor() {
       initialAssets={state.assets}
       save={save}
       upload={upload}
+      check={check}
+      publish={publish}
       onBack={() => navigate('/admin/missions')}
     />
   )

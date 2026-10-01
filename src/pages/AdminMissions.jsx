@@ -9,6 +9,7 @@ import {
   duplicateMission,
   fetchCategories,
   fetchMissions,
+  setMissionOpen,
   updateMissionInfo,
 } from '../lib/missions.js'
 import { deleteAssets, fetchAssetsInUse, fetchMissionAssets, formatBytes } from '../lib/assets.js'
@@ -99,6 +100,7 @@ export default function AdminMissions() {
   const [alsoDeleteAssets, setAlsoDeleteAssets] = useState(false)
   const [busy, setBusy] = useState(false)
   const [dialogError, setDialogError] = useState(null)
+  const [notice, setNotice] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -176,6 +178,21 @@ export default function AdminMissions() {
     )
   }
 
+  function handleToggleOpen(mission) {
+    setError(null)
+    run(() => setMissionOpen(mission.id, !mission.is_open), { inDialog: false })
+  }
+
+  async function copyStudentLink(mission) {
+    const url = `${window.location.origin}/mission/${mission.id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setNotice(`已複製學生連結：${url}`)
+    } catch {
+      setNotice(`學生連結：${url}`)
+    }
+  }
+
   function handleDuplicate(mission) {
     setError(null)
     run(() => duplicateMission(mission.id), { inDialog: false })
@@ -206,7 +223,7 @@ export default function AdminMissions() {
           </button>
         </div>
         <p className="text-slate-600 text-sm">
-          一個任務就是一個完整的小遊戲。新增後是「草稿」，學生看不到；按「編輯內容」進入場景編輯器，發布功能會在後續階段開放。
+          一個任務就是一個完整的小遊戲。新增後是「草稿」，學生看不到；在編輯器按「📢 發布」後，還要在這裡按「開放給學生」，學生才玩得到。
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -230,6 +247,14 @@ export default function AdminMissions() {
         </div>
 
         {error && <p className="text-red-600">{error}</p>}
+        {notice && (
+          <p className="text-emerald-700 text-sm break-all">
+            {notice}{' '}
+            <button type="button" onClick={() => setNotice(null)} className="underline">
+              關閉
+            </button>
+          </p>
+        )}
         {loading && <p className="text-slate-400">載入中...</p>}
         {!loading && !error && visible.length === 0 && (
           <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-500">
@@ -274,6 +299,21 @@ export default function AdminMissions() {
                 >
                   複製
                 </button>
+                {m.status === 'published' && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => handleToggleOpen(m)}
+                      className={`disabled:opacity-50 rounded-lg px-3 py-1.5 text-sm ${m.is_open ? 'bg-amber-100 hover:bg-amber-200 text-amber-800' : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'}`}
+                    >
+                      {m.is_open ? '關閉開放' : '開放給學生'}
+                    </button>
+                    <button type="button" onClick={() => copyStudentLink(m)} className="bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 text-sm">
+                      複製學生連結
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => {

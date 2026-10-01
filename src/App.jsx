@@ -10,6 +10,9 @@ import AdminLogin from './pages/AdminLogin.jsx'
 import AdminResetPassword from './pages/AdminResetPassword.jsx'
 import RequireAdmin from './components/RequireAdmin.jsx'
 
+// The mission player is only downloaded when a student opens a mission.
+const MissionPlay = lazy(() => import('./pages/MissionPlay.jsx'))
+
 // Admin pages (rich-text editor, Excel export, ...) are only downloaded when a teacher opens them.
 const AdminAssets = lazy(() => import('./pages/AdminAssets.jsx'))
 const AdminMissionEditor = lazy(() => import('./pages/AdminMissionEditor.jsx'))
@@ -33,6 +36,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/missions" element={<MissionSelect />} />
+        <Route path="/mission/:missionId" element={<MissionPlay />} />
         <Route path="/task" element={<TaskSelect />} />
         <Route path="/task/:topicId" element={<TaskPlay />} />
         <Route path="/battle" element={<BattleSelect />} />

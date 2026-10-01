@@ -1,3 +1,4 @@
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import RichContent from '../components/RichContent.jsx'
 import { assetUrl } from '../lib/assets.js'
 import { CANVAS_H, CANVAS_W, parseYouTubeId } from '../lib/missionSchema.js'
@@ -10,13 +11,24 @@ function Missing({ label }) {
   )
 }
 
-function ObjectBody({ object, assets, editor, lite }) {
+function ObjectBody({ object, assets, editor, lite, interactive }) {
   const asset = object.assetId ? assets[object.assetId] : null
   switch (object.type) {
     case 'image':
       return asset ? <img src={assetUrl(asset.storage_path)} alt="" draggable={false} className="w-full h-full" style={{ objectFit: 'fill' }} /> : <Missing label="🖼️ 素材遺失或未選擇" />
     case 'video': {
       const youtubeId = parseYouTubeId(object.youtubeUrl)
+      if (youtubeId && interactive) {
+        return (
+          <iframe
+            title={object.name}
+            src={`https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0&playsinline=1`}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+            className="w-full h-full border-0 bg-black"
+          />
+        )
+      }
       if (youtubeId) {
         return (
           <div className="w-full h-full relative bg-black">
@@ -27,7 +39,11 @@ function ObjectBody({ object, assets, editor, lite }) {
       }
       if (!asset) return <Missing label="🎬 素材遺失或未選擇" />
       if (lite) return <Missing label="🎬" />
-      return <video src={assetUrl(asset.storage_path)} muted playsInline preload="metadata" className="w-full h-full bg-black" style={{ objectFit: 'contain' }} />
+      return interactive ? (
+        <video src={assetUrl(asset.storage_path)} autoPlay muted={object.muted !== false} loop={!!object.loop} playsInline controls className="w-full h-full bg-black" style={{ objectFit: 'contain' }} />
+      ) : (
+        <video src={assetUrl(asset.storage_path)} muted playsInline preload="metadata" className="w-full h-full bg-black" style={{ objectFit: 'contain' }} />
+      )
     }
     case 'icon':
       return (
@@ -60,19 +76,31 @@ function SceneBackground({ background, assets }) {
   return <div className="absolute inset-0" style={{ background: background?.type === 'color' ? background.color : '#1e293b' }} />
 }
 
-// Pure DOM rendering of one scene at its logical 1600x900 size. The editor lays Konva on top for interaction;
-// the player (later phase) will reuse this view. Objects are stacked in array order (last = on top).
-export default function SceneView({ scene, assets, editor = false, lite = false }) {
+function BrokenObject() {
+  return <div className="w-full h-full flex items-center justify-center bg-slate-700/70 text-slate-200 text-lg text-center p-2">此物件暫時無法使用</div>
+}
+
+// Pure DOM rendering of one scene at its logical 1600x900 size (last object = on top).
+// The editor lays Konva on top for dragging; the player passes `interactive` and the callbacks below:
+//   isVisible(object)      -> whether to show it right now (flags / conditions); default = its initial `visible`
+//   background             -> overrides the scene background (swap_background)
+//   onObjectClick(object)  -> called for objects that have click events
+//   onObjectError(object, error) -> a broken object only shows a notice, the rest of the scene keeps working
+export default function SceneView({ scene, assets, editor = false, lite = false, interactive = false, isVisible, background, onObjectClick, onObjectError }) {
   return (
     <div className="relative overflow-hidden" style={{ width: CANVAS_W, height: CANVAS_H }}>
-      <SceneBackground background={scene.background} assets={assets} />
+      <SceneBackground background={background ?? scene.background} assets={assets} />
       {scene.objects.map((o) => {
-        const hidden = !o.visible
+        const visibleNow = isVisible ? isVisible(o) : o.visible
+        const hidden = !visibleNow
         if (hidden && !editor) return null
+        const clickable = interactive && o.onClick?.length > 0
+        const youtube = interactive && o.type === 'video' && parseYouTubeId(o.youtubeUrl)
         return (
           <div
             key={o.id}
-            className="absolute pointer-events-none"
+            className={`absolute ${clickable || youtube ? 'pointer-events-auto' : 'pointer-events-none'} ${clickable ? 'cursor-pointer' : ''}`}
+            onClick={clickable ? () => onObjectClick?.(o) : undefined}
             style={{
               left: o.x,
               top: o.y,
@@ -84,7 +112,9 @@ export default function SceneView({ scene, assets, editor = false, lite = false 
               outline: hidden ? '2px dashed #94a3b8' : undefined,
             }}
           >
-            <ObjectBody object={o} assets={assets} editor={editor} lite={lite} />
+            <ErrorBoundary fallback={<BrokenObject />} onError={(err) => onObjectError?.(o, err)}>
+              <ObjectBody object={o} assets={assets} editor={editor} lite={lite} interactive={interactive} />
+            </ErrorBoundary>
           </div>
         )
       })}

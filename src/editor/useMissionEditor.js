@@ -228,6 +228,8 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
     updateScene: (id, patch, opts) => commit(mapScene(draftRef.current, id, (sc) => ({ ...sc, ...patch })), opts),
     setStartScene: (id) => commit(mapStage(draftRef.current, (st) => ({ ...st, startSceneId: id })), { important: true }),
     setStageTitle: (title) => commit(mapStage(draftRef.current, (st) => ({ ...st, title })), { key: 'stage-title' }),
+    updateStage: (patch, opts) => commit(mapStage(draftRef.current, (st) => ({ ...st, ...patch })), opts),
+    updateStage: (patch, opts) => commit(mapStage(draftRef.current, (st) => ({ ...st, ...patch })), opts),
 
     // Sets (or clears, with targetId = null) one exit; `alsoReturn` adds the opposite exit on the target if it is free.
     setExit: (fromId, dir, targetId, alsoReturn = false) => {

@@ -174,3 +174,35 @@ body {
 .battle-rich img {
   max-height: max(14vw, 90px);
 }
+
+/* ---- mission player: scene change animations (spec-v5 §6.1) ----
+   left/right = horizontal slide, up/down = vertical slide, forward/backward = fade + slight zoom. */
+@keyframes tr-in-from-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes tr-in-from-right { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes tr-in-from-top { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes tr-in-from-bottom { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes tr-out-to-right { to { transform: translateX(100%); } }
+@keyframes tr-out-to-left { to { transform: translateX(-100%); } }
+@keyframes tr-out-to-bottom { to { transform: translateY(100%); } }
+@keyframes tr-out-to-top { to { transform: translateY(-100%); } }
+@keyframes tr-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tr-fade-out { to { opacity: 0; } }
+@keyframes tr-zoom-in { from { opacity: 0; transform: scale(1.12); } to { opacity: 1; transform: none; } }
+@keyframes tr-zoom-out { to { opacity: 0; transform: scale(0.88); } }
+@keyframes tr-shrink-in { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: none; } }
+@keyframes tr-shrink-out { to { opacity: 0; transform: scale(1.12); } }
+
+.tr-in-left { animation: tr-in-from-left 0.45s ease both; }
+.tr-in-right { animation: tr-in-from-right 0.45s ease both; }
+.tr-in-up { animation: tr-in-from-top 0.45s ease both; }
+.tr-in-down { animation: tr-in-from-bottom 0.45s ease both; }
+.tr-in-fade { animation: tr-fade-in 0.45s ease both; }
+.tr-in-forward { animation: tr-zoom-in 0.45s ease both; }
+.tr-in-backward { animation: tr-shrink-in 0.45s ease both; }
+.tr-out-left { animation: tr-out-to-right 0.45s ease both; }
+.tr-out-right { animation: tr-out-to-left 0.45s ease both; }
+.tr-out-up { animation: tr-out-to-bottom 0.45s ease both; }
+.tr-out-down { animation: tr-out-to-top 0.45s ease both; }
+.tr-out-fade { animation: tr-fade-out 0.45s ease both; }
+.tr-out-forward { animation: tr-zoom-out 0.45s ease both; }
+.tr-out-backward { animation: tr-shrink-out 0.45s ease both; }

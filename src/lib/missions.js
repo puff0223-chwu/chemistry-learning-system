@@ -80,6 +80,25 @@ export async function deleteMission(id) {
   if (error) throw error
 }
 
+// Copies the draft over the published version and bumps the version number. is_open is left as it is,
+// so publishing never opens a mission to students by itself.
+export async function publishMission(id) {
+  const { data, error } = await supabase.from('missions').select('draft_data, published_version').eq('id', id).single()
+  if (error) throw error
+  const version = data.published_version + 1
+  const { error: updateError } = await supabase
+    .from('missions')
+    .update({ published_data: data.draft_data, published_version: version, status: 'published', published_at: new Date().toISOString() })
+    .eq('id', id)
+  if (updateError) throw updateError
+  return version
+}
+
+export async function setMissionOpen(id, open) {
+  const { error } = await supabase.from('missions').update({ is_open: open }).eq('id', id)
+  if (error) throw error
+}
+
 // Student side: only published AND open missions are visible, through the published_missions view.
 export async function fetchPublishedMissions() {
   const { data, error } = await supabase

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
+import { collectFlags } from '../lib/missionEvents.js'
 import { CANVAS_H, CANVAS_W, validateImport } from '../lib/missionSchema.js'
+import GameEngine from '../player/GameEngine.js'
+import Player from '../player/Player.jsx'
 import LeftPanel from './LeftPanel.jsx'
 import RightPanel from './RightPanel.jsx'
 import SceneCanvas from './SceneCanvas.jsx'
@@ -27,7 +30,7 @@ function statusText(status, savedAt, saveError) {
 
 // The full-screen scene editor. It knows nothing about Supabase: the page hands in the draft, the assets
 // and the save / upload functions, so it can also be exercised on its own.
-export default function MissionEditor({ missionId, title, initialDraft, initialAssets, save, upload, onBack }) {
+export default function MissionEditor({ missionId, title, initialDraft, initialAssets, save, upload, check, publish, onBack }) {
   const editor = useMissionEditor({ initialDraft, save, storageKey: `mission-draft-${missionId}` })
   const { draft, scene, object, sceneId, status, savedAt, saveError, canUndo, canRedo, actions } = editor
   const stage = getStage(draft)
@@ -42,6 +45,8 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   const [backup, setBackup] = useState(() => actions.findBackup())
   const [pendingImport, setPendingImport] = useState(null)
   const [message, setMessage] = useState(null)
+  const [preview, setPreview] = useState(null) // GameEngine while test-playing
+  const [publishState, setPublishState] = useState(null) // { phase: 'checking' | 'report' | 'publishing', result? }
   const areaRef = useRef(null)
   const importInput = useRef(null)
 
@@ -60,11 +65,12 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   // Keyboard shortcuts always use the freshest actions.
   const latest = useRef(null)
   useEffect(() => {
-    latest.current = { actions, object, view }
+    latest.current = { actions, object, view, previewing: !!preview }
   })
   useEffect(() => {
     function onKeyDown(e) {
-      const { actions: a, object: o, view: v } = latest.current
+      const { actions: a, object: o, view: v, previewing } = latest.current
+      if (previewing) return // keys belong to the game while test-playing
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault()
@@ -165,6 +171,51 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
     setMessage("儲存失敗，所以先不離開。請檢查網路後再試一次（草稿已暫存在這台電腦）。")
   }
 
+  // Event forms need the list of scenes, objects, flags and assets to pick from.
+  const ctx = useMemo(
+    () => ({
+      scenes: stage.scenes,
+      objects: stage.scenes.flatMap((sc) => sc.objects.map((o) => ({ id: o.id, name: o.name, sceneName: sc.name }))),
+      flags: collectFlags(draft),
+      assets,
+    }),
+    [stage, draft, assets],
+  )
+
+  function startPreview() {
+    if (!scene) return
+    setPreview(new GameEngine({ stage, startSceneId: scene.sceneId }))
+  }
+
+  function closePreview() {
+    preview?.destroy()
+    setPreview(null)
+  }
+
+  // Publishing: save first, run the health check, show the report, publish on confirmation.
+  async function startPublish() {
+    setPublishState({ phase: 'checking' })
+    try {
+      if (!(await actions.saveNow())) throw new Error('草稿還沒存好，請稍後再試')
+      setPublishState({ phase: 'report', result: await check(draft) })
+    } catch (err) {
+      setPublishState(null)
+      setMessage(`無法檢查：${err.message}`)
+    }
+  }
+
+  async function confirmPublish() {
+    setPublishState((s) => ({ ...s, phase: 'publishing' }))
+    try {
+      const version = await publish()
+      setPublishState(null)
+      setMessage(`已發布第 ${version} 版。學生要在「任務列表」把這個任務設為「開放」才看得到。`)
+    } catch (err) {
+      setPublishState(null)
+      setMessage(`發布失敗：${err.message}`)
+    }
+  }
+
   const st = statusText(status, savedAt, saveError)
   const wrappedActions = { ...actions, requestDeleteScene: setDeleteSceneId }
 
@@ -205,6 +256,9 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           </select>
         )}
         <span className="flex-1" />
+        <button type="button" onClick={startPreview} disabled={!scene} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 rounded-lg px-3 py-1 text-sm font-bold" title="從目前這個場景開始試玩">
+          ▶ 試玩
+        </button>
         <button type="button" onClick={exportJson} className="text-sm text-[#c9d6e6] hover:text-white">
           匯出備份
         </button>
@@ -228,6 +282,11 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
         <button type="button" onClick={actions.saveNow} disabled={status === 'saving'} title="Ctrl+S" className="bg-cyan hover:bg-cyan-dark disabled:opacity-60 rounded-lg px-4 py-1.5 font-bold">
           💾 儲存
         </button>
+        {publish && (
+          <button type="button" onClick={startPublish} disabled={!!publishState} title="檢查並發布給學生" className="bg-amber-500 hover:bg-amber-400 disabled:opacity-60 rounded-lg px-4 py-1.5 font-bold">
+            📢 發布
+          </button>
+        )}
       </header>
 
       <div className="hidden max-[1279px]:block bg-amber-100 text-amber-900 text-sm px-4 py-1 shrink-0">
@@ -289,8 +348,48 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           </div>
         )}
 
-        {scene && <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} assets={assets} assetMap={assetMap} actions={wrappedActions} />}
+        {scene && <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} />}
       </div>
+
+      {preview && <Player engine={preview} assets={assetMap} title={`試玩：${title}`} mode="preview" onExit={closePreview} />}
+
+      {publishState?.phase === 'checking' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 text-white text-xl">儲存並檢查中…</div>
+      )}
+
+      {(publishState?.phase === 'report' || publishState?.phase === 'publishing') && (
+        <ConfirmDialog
+          title={publishState.result.errors.length ? '還不能發布' : '發布這一版給學生？'}
+          message={
+            publishState.result.errors.length
+              ? '下面的錯誤要先修好才能發布：'
+              : publishState.result.warnings.length
+                ? '有一些提醒，確定沒問題的話可以繼續發布：'
+                : '檢查通過，沒有發現問題。發布後學生玩到的就是目前這個版本（草稿之後再改，不會影響學生，直到你再次發布）。'
+          }
+          confirmText={publishState.result.errors.length ? '知道了' : '確定發布'}
+          busyText="發布中..."
+          confirmClass="bg-amber-500 hover:bg-amber-400"
+          busy={publishState.phase === 'publishing'}
+          onCancel={() => setPublishState(null)}
+          onConfirm={() => (publishState.result.errors.length ? setPublishState(null) : confirmPublish())}
+        >
+          {(publishState.result.errors.length > 0 || publishState.result.warnings.length > 0) && (
+            <ul className="text-sm flex flex-col gap-1 max-h-60 overflow-y-auto">
+              {publishState.result.errors.map((t, i) => (
+                <li key={`e${i}`} className="text-red-700">
+                  ❌ {t}
+                </li>
+              ))}
+              {publishState.result.warnings.map((t, i) => (
+                <li key={`w${i}`} className="text-amber-700">
+                  ⚠️ {t}
+                </li>
+              ))}
+            </ul>
+          )}
+        </ConfirmDialog>
+      )}
 
       {deleteSceneId && (
         <ConfirmDialog

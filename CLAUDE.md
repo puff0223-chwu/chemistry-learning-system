@@ -49,7 +49,7 @@
 5. 回報後停下，等老師確認再合併 main、再進下一階段。
 
 ## 目前階段
-舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。第 3 階段「畫布編輯器核心」已完成並上線（老師實測通過）。**下一步：第 4 階段「播放器核心＋事件系統」**。
+舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。第 3 階段「畫布編輯器核心」已完成並上線（老師實測通過）。第 4 階段「播放器核心＋事件系統」已開發完成（分支 `phase-4-player`，**不需要新的 SQL**），**等老師實測（含真實資料庫的發布與學生遊玩）後才合併 main**；合併後建議先做「圖層群組」獨立小階段，再做第 5 階段「答案鎖」。
 **老師指定待辦：圖層群組（規格書 6.3）必須在第 7 階段開工前完成**，每階段開工盤點時請確認此項狀態。詳見 `docs/PROGRESS.md`。
 
 
@@ -59,4 +59,7 @@
 - `src/lib/missions.js`：任務 CRUD、空任務 JSON 骨架；學生端只能讀 `published_missions` 檢視表，不可直接讀 `missions` 表。
 - `src/lib/assets.js`：素材上傳（WebP 壓縮、雜湊檔名）、用量、使用中檢查、刪除。**任務 JSON 引用素材一律用 `mission_assets.id` 當 `assetId`**（刪除保護靠它比對）。`supabase/phase2-assets.sql`：`name` 欄位與 `mission_assets_in_use` 函式。
 - 編輯器：`src/pages/AdminMissionEditor.jsx`（讀寫 Supabase）→ `src/editor/MissionEditor.jsx`（全螢幕外殼，不碰 Supabase，由 props 傳入草稿、素材、存檔函式）；狀態／復原／自動存檔在 `useMissionEditor.js`；`SceneView.jsx` 以 DOM 繪製場景（播放器要共用它），`SceneCanvas.jsx` 疊 Konva 透明層做互動；`SceneGraph.jsx` 是 react-flow 場景關聯圖。任務 JSON 的結構與預設值在 `src/lib/missionSchema.js`（物件陣列順序＝圖層順序，最後＝最上層）。
-- 網址：學生 `/missions`；後台編輯器 `/admin/missions/:id/edit`；後台素材庫 `/admin/assets`；後台 `/admin/missions`、`/admin/mission-categories`；舊版 `/task`、`/battle` 不變。
+- 播放器：`src/pages/MissionPlay.jsx`（學生流程：讀已發布版本→學生資料→預載→續玩詢問）→ `src/player/Player.jsx`（畫面、轉場、訊息、過關）← `src/player/GameEngine.js`（狀態與事件執行器，與 React／Supabase 無關，可用 node 直接測）。事件／條件的規則在 `src/lib/missionEvents.js`（編輯器表單與播放器共用）。新增動作類型時：先在 `missionEvents.js` 的 `ACTION_TYPES`／`newAction` 登記、`GameEngine.runAction` 實作、`EventEditor.jsx` 加表單、`missionCheck.js` 補健檢。
+- 紀錄：`src/lib/missionLogQueue.js`（IndexedDB 離線佇列；`createMissionRecorder` 產生遞增流水號）。**流水號與進度存檔必須一起存**（見 MissionPlay 的 `persist`），否則續玩會重複使用流水號而被資料庫丟掉紀錄。
+- 發布：編輯器「📢 發布」→ `missionCheck.js` 健檢 → `publishMission()`；是否對學生開放由任務列表的「開放給學生」控制。
+- 網址：學生 `/missions`、`/mission/:id`；後台編輯器 `/admin/missions/:id/edit`；後台素材庫 `/admin/assets`；後台 `/admin/missions`、`/admin/mission-categories`；舊版 `/task`、`/battle` 不變。

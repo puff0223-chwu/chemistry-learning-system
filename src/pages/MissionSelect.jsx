@@ -71,16 +71,21 @@ export default function MissionSelect() {
           <p className="text-center text-sub">目前沒有開放的任務，請等老師開放。</p>
         )}
 
-        {/* Cards will link to /mission/:id when the player is built (spec-v5 phase 4). */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {visible.map((m) => (
-            <div key={m.id} className="glass-card rounded-2xl overflow-hidden" style={{ borderLeft: '4px solid var(--accent)' }}>
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => navigate(`/mission/${m.id}`)}
+              className="glass-card glow-hover rounded-2xl overflow-hidden text-left"
+              style={{ borderLeft: '4px solid var(--accent)' }}
+            >
               {m.cover_url && <img src={m.cover_url} alt="" className="w-full h-36 object-cover" loading="lazy" />}
               <div className="p-6">
                 <h3 className="text-xl font-bold text-white mb-1">{m.title}</h3>
                 {categoryName(m.category_id) && <p className="text-sub text-sm">{categoryName(m.category_id)}</p>}
               </div>
-            </div>
+            </button>
           ))}
         </div>
 

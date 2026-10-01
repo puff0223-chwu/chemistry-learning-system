@@ -130,14 +130,19 @@ export function parseYouTubeId(url) {
   return m ? m[1] : null
 }
 
-// Every asset id the draft refers to (scene backgrounds and objects).
-export function collectAssetIds(draft) {
+// Every asset id the mission refers to. Any `assetId` field counts (backgrounds, objects, swap_background,
+// play_sound, and whatever later phases add), so the list never silently misses a new kind of reference.
+export function collectAssetIds(data) {
   const ids = new Set()
-  for (const stage of draft.stages) {
-    for (const scene of stage.scenes) {
-      if (scene.background?.type === 'image' && scene.background.assetId) ids.add(scene.background.assetId)
-      for (const o of scene.objects) if (o.assetId) ids.add(o.assetId)
+  const walk = (node) => {
+    if (Array.isArray(node)) node.forEach(walk)
+    else if (node && typeof node === 'object') {
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'assetId' && typeof value === 'string' && value) ids.add(value)
+        else walk(value)
+      }
     }
   }
+  walk(data.stages)
   return [...ids]
 }

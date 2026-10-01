@@ -2,6 +2,7 @@ import { useState } from 'react'
 import RichTextEditor from '../components/RichTextEditor.jsx'
 import { DIRECTIONS, ICON_CHOICES, OBJECT_TYPE_LABELS, parseYouTubeId } from '../lib/missionSchema.js'
 import AssetPicker from './AssetPicker.jsx'
+import { ConditionEditor, EventEditor, FLAG_LIST_ID } from './EventEditor.jsx'
 
 const inputClass = 'w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-sm'
 
@@ -70,7 +71,17 @@ function LayersPanel({ objects, selectedId, onSelect, onUpdate, onMove, onDelete
 
 // ---------------------------------------------------------------- object properties
 
-function ObjectProperties({ object, assets, assetMap, onUpdate }) {
+function Section({ title, hint, children }) {
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-slate-200 pt-3">
+      <p className="text-sm font-bold">{title}</p>
+      {hint && <p className="text-xs text-slate-500">{hint}</p>}
+      {children}
+    </div>
+  )
+}
+
+function ObjectProperties({ object, assets, assetMap, ctx, onUpdate }) {
   const [picker, setPicker] = useState(null)
   const set = (patch) => onUpdate(object.id, patch, { key: `prop-${object.id}-${Object.keys(patch)[0]}` })
   const asset = object.assetId ? assetMap[object.assetId] : null
@@ -149,7 +160,7 @@ function ObjectProperties({ object, assets, assetMap, onUpdate }) {
         </>
       )}
 
-      {object.type === 'hotspot' && <p className="text-xs text-slate-500">隱形點擊區在學生畫面看不到，之後可以設定「點了會發生什麼事」（事件系統在後續階段）。</p>}
+      {object.type === 'hotspot' && <p className="text-xs text-slate-500">隱形點擊區在學生畫面看不到，下方可以設定「點了會發生什麼事」。</p>}
 
       <div className="grid grid-cols-2 gap-2">
         <NumField label="X" value={object.x} onChange={(v) => set({ x: v })} />
@@ -161,6 +172,17 @@ function ObjectProperties({ object, assets, assetMap, onUpdate }) {
           <input type="range" min={0} max={1} step={0.05} value={object.opacity} onChange={(e) => set({ opacity: Number(e.target.value) })} />
         </Field>
       </div>
+
+      <Section title="🖱️ 點擊時" hint="學生點這個物件時，依序執行這些動作。">
+        <EventEditor actions={object.onClick ?? []} onChange={(v) => onUpdate(object.id, { onClick: v }, { key: `onclick-${object.id}` })} ctx={ctx} />
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={!!object.logClick} onChange={(e) => onUpdate(object.id, { logClick: e.target.checked })} /> 記錄學生點擊（寫入學習紀錄）
+        </label>
+      </Section>
+
+      <Section title="👁 顯示條件" hint="沒有設定＝一直顯示（受上面圖層的「眼睛」控制）。設了條件，要條件成立才看得到。">
+        <ConditionEditor value={object.showWhen ?? null} onChange={(v) => onUpdate(object.id, { showWhen: v }, { key: `showwhen-${object.id}` })} />
+      </Section>
 
       {picker && (
         <AssetPicker
@@ -180,7 +202,7 @@ function ObjectProperties({ object, assets, assetMap, onUpdate }) {
 
 // ---------------------------------------------------------------- scene properties
 
-function SceneProperties({ scene, scenes, stage, assets, assetMap, isStart, onUpdateScene, onSetExit, onSetStart, onStageTitle, onDuplicate, onDelete }) {
+function SceneProperties({ scene, scenes, stage, assets, assetMap, ctx, isStart, onUpdateScene, onSetExit, onSetStart, onStageTitle, onUpdateStage, onDuplicate, onDelete }) {
   const [picker, setPicker] = useState(false)
   const background = scene.background
   const bgAsset = background?.type === 'image' ? assetMap[background.assetId] : null
@@ -227,6 +249,39 @@ function SceneProperties({ scene, scenes, stage, assets, assetMap, isStart, onUp
         </div>
       </div>
 
+      {DIRECTIONS.some((d) => scene.exits[d.key]) && (
+        <Section title="🔒 出口通行條件" hint="沒有設定＝隨時可以走。設了條件，沒達成時顯示你寫的提示。">
+          {DIRECTIONS.filter((d) => scene.exits[d.key]).map((d) => {
+            const rule = scene.exitConditions?.[d.key] ?? {}
+            const setRule = (patch) => {
+              const next = { ...rule, ...patch }
+              const exitConditions = { ...(scene.exitConditions ?? {}) }
+              if (next.when || next.message) exitConditions[d.key] = next
+              else delete exitConditions[d.key]
+              onUpdateScene(scene.sceneId, { exitConditions }, { key: `exitrule-${scene.sceneId}-${d.key}` })
+            }
+            return (
+              <details key={d.key} open={!!rule.when} className="border border-slate-200 rounded-lg p-2">
+                <summary className="cursor-pointer text-sm">
+                  {d.arrow} {d.label}
+                  {rule.when ? '（有條件）' : ''}
+                </summary>
+                <div className="flex flex-col gap-2 mt-2">
+                  <ConditionEditor value={rule.when ?? null} onChange={(v) => setRule({ when: v })} />
+                  <Field label="沒達成時顯示的提示">
+                    <input value={rule.message ?? ''} onChange={(e) => setRule({ message: e.target.value })} placeholder="例如：先戴上護目鏡才能靠近抽氣櫃" className={inputClass} />
+                  </Field>
+                </div>
+              </details>
+            )
+          })}
+        </Section>
+      )}
+
+      <Section title="🎬 進入這個場景時" hint="每次學生走進這個場景都會執行。要只做一次，請搭配旗標與「如果…」。">
+        <EventEditor actions={scene.onEnter ?? []} onChange={(v) => onUpdateScene(scene.sceneId, { onEnter: v }, { key: `onenter-${scene.sceneId}` })} ctx={ctx} />
+      </Section>
+
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={isStart} onClick={() => onSetStart(scene.sceneId)} className="bg-slate-100 hover:bg-slate-200 disabled:opacity-60 rounded-lg px-3 py-1.5 text-sm">
           {isStart ? '★ 這是起始場景' : '設為起始場景'}
@@ -245,9 +300,18 @@ function SceneProperties({ scene, scenes, stage, assets, assetMap, isStart, onUp
         </button>
       </div>
 
-      <Field label="關卡名稱（目前只有一關）">
-        <input value={stage.title} onChange={(e) => onStageTitle(e.target.value)} className={inputClass} />
-      </Field>
+      <Section title="🏁 關卡" hint="目前一個任務只有一關。">
+        <Field label="關卡名稱">
+          <input value={stage.title} onChange={(e) => onStageTitle(e.target.value)} className={inputClass} />
+        </Field>
+        <Field label="開場說明（學生開始前會看到，可留空）">
+          <RichTextEditor key={stage.stageId} value={stage.intro ?? ''} onChange={(html) => onUpdateStage({ intro: html }, { key: 'stage-intro' })} minHeight={80} />
+        </Field>
+        <p className="text-xs text-slate-500">過關條件（條件成立就自動過關；也可以用「完成本關」動作過關。兩者都沒設，學生就無法過關）</p>
+        <ConditionEditor value={stage.completeWhen ?? null} onChange={(v) => onUpdateStage({ completeWhen: v }, { key: 'stage-completewhen' })} />
+        <p className="text-xs text-slate-500">過關後要執行的動作</p>
+        <EventEditor actions={stage.onComplete ?? []} onChange={(v) => onUpdateStage({ onComplete: v }, { key: 'stage-oncomplete' })} ctx={ctx} />
+      </Section>
 
       {picker && (
         <AssetPicker
@@ -265,9 +329,14 @@ function SceneProperties({ scene, scenes, stage, assets, assetMap, isStart, onUp
   )
 }
 
-export default function RightPanel({ scene, scenes, stage, object, assets, assetMap, actions }) {
+export default function RightPanel({ scene, scenes, stage, object, assets, assetMap, ctx, actions }) {
   return (
     <aside className="w-80 shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
+      <datalist id={FLAG_LIST_ID}>
+        {ctx.flags.map((f) => (
+          <option key={f} value={f} />
+        ))}
+      </datalist>
       <LayersPanel
         objects={scene.objects}
         selectedId={object?.id ?? null}
@@ -279,7 +348,7 @@ export default function RightPanel({ scene, scenes, stage, object, assets, asset
       />
       <div className="flex-1 overflow-y-auto p-3">
         {object ? (
-          <ObjectProperties key={object.id} object={object} assets={assets} assetMap={assetMap} onUpdate={actions.updateObject} />
+          <ObjectProperties key={object.id} object={object} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} />
         ) : (
           <SceneProperties
             scene={scene}
@@ -287,11 +356,13 @@ export default function RightPanel({ scene, scenes, stage, object, assets, asset
             stage={stage}
             assets={assets}
             assetMap={assetMap}
+            ctx={ctx}
             isStart={stage.startSceneId === scene.sceneId}
             onUpdateScene={actions.updateScene}
             onSetExit={(from, dir, to) => actions.setExit(from, dir, to, false)}
             onSetStart={actions.setStartScene}
             onStageTitle={actions.setStageTitle}
+            onUpdateStage={actions.updateStage}
             onDuplicate={actions.duplicateScene}
             onDelete={actions.requestDeleteScene}
           />
