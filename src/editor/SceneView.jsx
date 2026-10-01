@@ -112,6 +112,12 @@ export default function SceneView({ scene, assets, editor = false, lite = false,
               outline: hidden ? '2px dashed #94a3b8' : undefined,
             }}
           >
+            {editor && (o.onClick?.length > 0 || o.showWhen || o.visible === false) && (
+              <span className="absolute top-0 left-0 z-10 rounded-br-lg bg-black/65 px-1.5 text-[30px] leading-tight whitespace-nowrap" title="⚡ 點擊有事件　⏳ 有出現條件或一開始隱藏">
+                {o.onClick?.length > 0 ? '⚡' : ''}
+                {o.showWhen || o.visible === false ? '⏳' : ''}
+              </span>
+            )}
             <ErrorBoundary fallback={<BrokenObject />} onError={(err) => onObjectError?.(o, err)}>
               <ObjectBody object={o} assets={assets} editor={editor} lite={lite} interactive={interactive} />
             </ErrorBoundary>

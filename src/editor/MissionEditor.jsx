@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
-import { collectFlags } from '../lib/missionEvents.js'
+import { collectFlags, completionSources, flagUsage } from '../lib/missionEvents.js'
 import { CANVAS_H, CANVAS_W, validateImport } from '../lib/missionSchema.js'
 import GameEngine from '../player/GameEngine.js'
 import Player from '../player/Player.jsx'
+import FlagManager from './FlagManager.jsx'
+import IconPicker from './IconPicker.jsx'
+import { iconName } from './icons.js'
 import LeftPanel from './LeftPanel.jsx'
 import RightPanel from './RightPanel.jsx'
 import SceneCanvas from './SceneCanvas.jsx'
 import SceneGraph from './SceneGraph.jsx'
+import StageDialog from './StageDialog.jsx'
 import useMissionEditor, { getStage } from './useMissionEditor.js'
 
 const ZOOMS = [
@@ -45,6 +49,9 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   const [backup, setBackup] = useState(() => actions.findBackup())
   const [pendingImport, setPendingImport] = useState(null)
   const [message, setMessage] = useState(null)
+  const [iconPickerFor, setIconPickerFor] = useState(null) // object id while choosing an icon
+  const [stageOpen, setStageOpen] = useState(false)
+  const [flagsOpen, setFlagsOpen] = useState(false)
   const [preview, setPreview] = useState(null) // GameEngine while test-playing
   const [publishState, setPublishState] = useState(null) // { phase: 'checking' | 'report' | 'publishing', result? }
   const areaRef = useRef(null)
@@ -182,6 +189,23 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
     [stage, draft, assets],
   )
 
+  const usage = useMemo(() => flagUsage(draft), [draft])
+
+  function addObject(type) {
+    const id = actions.addObject(type)
+    if (type === 'icon' && id) setIconPickerFor(id) // a new icon starts by choosing which one
+  }
+
+  function pickIcon(emoji) {
+    const target = scene?.objects.find((o) => o.id === iconPickerFor)
+    if (target) {
+      // Rename only if the teacher has not given it a name of their own yet.
+      const untouched = target.name === '圖示' || target.name === iconName(target.icon)
+      actions.updateObject(target.id, untouched ? { icon: emoji, name: iconName(emoji) } : { icon: emoji }, { important: true })
+    }
+    setIconPickerFor(null)
+  }
+
   function startPreview() {
     if (!scene) return
     setPreview(new GameEngine({ stage, startSceneId: scene.sceneId }))
@@ -246,6 +270,14 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
             ↷ 重做
           </button>
         </div>
+        <div className="flex gap-1">
+          <button type="button" onClick={() => setStageOpen(true)} title="開場說明、怎樣算過關、過關後" className="px-2 py-1 rounded hover:bg-white/10 text-sm">
+            🏁 關卡設定
+          </button>
+          <button type="button" onClick={() => setFlagsOpen(true)} title="學生做過的事（記號）一覽，可改名" className="px-2 py-1 rounded hover:bg-white/10 text-sm">
+            📌 進度記號{usage.size ? ` (${usage.size})` : ''}
+          </button>
+        </div>
         {view === 'canvas' && (
           <select value={zoomMode} onChange={(e) => setZoomMode(e.target.value === 'fit' ? 'fit' : Number(e.target.value))} aria-label="縮放" className="bg-white/10 rounded px-2 py-1 text-sm">
             {ZOOMS.map((z) => (
@@ -305,7 +337,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
             setView('canvas')
           }}
           onAddScene={actions.addScene}
-          onAddObject={(type) => actions.addObject(type)}
+          onAddObject={addObject}
           onAddAsset={(a) => placeAsset(a)}
           onUpload={handleUpload}
           uploadMessage={uploadMessage}
@@ -348,8 +380,23 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           </div>
         )}
 
-        {scene && <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} />}
+        {scene && <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} onPickIcon={setIconPickerFor} />}
       </div>
+
+      {iconPickerFor && <IconPicker current={scene?.objects.find((o) => o.id === iconPickerFor)?.icon} onPick={pickIcon} onClose={() => setIconPickerFor(null)} />}
+
+      {stageOpen && (
+        <StageDialog
+          stage={stage}
+          ctx={ctx}
+          completionPlaces={completionSources(draft)}
+          onTitle={actions.setStageTitle}
+          onUpdateStage={actions.updateStage}
+          onClose={() => setStageOpen(false)}
+        />
+      )}
+
+      {flagsOpen && <FlagManager usage={usage} onRename={actions.renameFlag} onClose={() => setFlagsOpen(false)} />}
 
       {preview && <Player engine={preview} assets={assetMap} title={`試玩：${title}`} mode="preview" onExit={closePreview} />}
 

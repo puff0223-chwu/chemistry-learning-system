@@ -1,4 +1,4 @@
-import { collectEventSources, walkActions } from './missionEvents.js'
+import { collectEventSources, isEmptyCondition, listSources, walkActions } from './missionEvents.js'
 
 // Pre-publish health check (subset of spec-v5 §17.5; the answer-lock checks arrive with the locks).
 // `existingAssetIds` = ids that still exist in the asset library.
@@ -25,7 +25,8 @@ export function checkMission(data, existingAssetIds) {
 
   const flagsSet = new Set()
   const gotoTargets = new Set()
-  let canComplete = !!stage.completeWhen && Object.keys(stage.completeWhen).length > 0
+  const canCompleteByCondition = !isEmptyCondition(stage.completeWhen)
+  let canComplete = canCompleteByCondition
 
   for (const { where, list } of lists) {
     walkActions(list, (a) => {
@@ -81,6 +82,17 @@ export function checkMission(data, existingAssetIds) {
   for (const scene of stage.scenes) {
     if (scene.background?.assetId && !existingAssetIds.has(scene.background.assetId)) errors.push(`場景「${scene.name}」的背景圖已經從素材庫刪除，請重新選擇。`)
     for (const o of scene.objects) if (o.assetId && !existingAssetIds.has(o.assetId)) errors.push(`場景「${scene.name}」的「${o.name}」用到的素材已經從素材庫刪除，請重新選擇。`)
+  }
+
+  // Conditions that still have an empty "which thing?" row, and the stage's automatic-completion box left empty.
+  for (const source of listSources(data)) {
+    for (const c of source.conditions) {
+      const blank = ['allFlags', 'anyFlags', 'notFlags'].some((k) => (c?.[k] ?? []).some((f) => !f))
+      if (blank) warnings.push(`${source.label}：有一個條件還沒選是哪件事，目前會被忽略。`)
+    }
+  }
+  if (stage.completeWhen && !canCompleteByCondition) {
+    warnings.push('「自動過關」已勾選，但還沒設定要完成哪些事（所以不會自動過關）。')
   }
 
   // Scenes nobody can walk into.

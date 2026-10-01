@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import RichTextEditor from '../components/RichTextEditor.jsx'
-import { DIRECTIONS, ICON_CHOICES, OBJECT_TYPE_LABELS, parseYouTubeId } from '../lib/missionSchema.js'
+import { DIRECTIONS, OBJECT_TYPE_LABELS, parseYouTubeId } from '../lib/missionSchema.js'
 import AssetPicker from './AssetPicker.jsx'
-import { ConditionEditor, EventEditor, FLAG_LIST_ID } from './EventEditor.jsx'
+import { ConditionEditor, EventEditor } from './EventEditor.jsx'
 
 const inputClass = 'w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-sm'
 
@@ -31,6 +31,27 @@ function NumField({ label, value, onChange, min, max, step = 1 }) {
   )
 }
 
+function Tabs({ tabs, value, onChange }) {
+  return (
+    <div className="flex border-b border-slate-200 -mx-3 px-3 gap-1 sticky top-0 bg-white z-10 pt-1">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={`px-3 py-1.5 text-sm rounded-t-lg border-b-2 -mb-px ${value === t.key ? 'border-cyan font-bold text-navy' : 'border-transparent text-slate-500 hover:text-navy'}`}
+        >
+          {t.label}
+          {t.badge ? <span className="ml-1 text-xs">{t.badge}</span> : null}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// What an object can do, as little icons: ⚡ reacts to clicks, ⏳ not always visible.
+export const interactionBadges = (o) => `${o.onClick?.length ? '⚡' : ''}${o.showWhen || o.visible === false ? '⏳' : ''}`
+
 // ---------------------------------------------------------------- layers
 
 function LayersPanel({ objects, selectedId, onSelect, onUpdate, onMove, onDelete, onDuplicate }) {
@@ -42,7 +63,7 @@ function LayersPanel({ objects, selectedId, onSelect, onUpdate, onMove, onDelete
       <ul className="overflow-y-auto flex flex-col gap-1">
         {reversed.map((o) => (
           <li key={o.id} className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm ${o.id === selectedId ? 'bg-cyan/15 ring-1 ring-cyan' : 'hover:bg-slate-100'}`}>
-            <button type="button" title={o.visible ? '目前一開始會顯示，按一下改成隱藏' : '目前一開始隱藏，按一下改成顯示'} onClick={() => onUpdate(o.id, { visible: !o.visible })} className="w-6">
+            <button type="button" title={o.visible ? '一開始會顯示，按一下改成「一開始看不到」' : '一開始看不到，按一下改成顯示'} onClick={() => onUpdate(o.id, { visible: !o.visible })} className="w-6">
               {o.visible ? '👁️' : '🚫'}
             </button>
             <button type="button" title={o.locked ? '已鎖定（畫布上點不到）' : '鎖定，避免誤拖'} onClick={() => onUpdate(o.id, { locked: !o.locked })} className="w-6">
@@ -51,6 +72,10 @@ function LayersPanel({ objects, selectedId, onSelect, onUpdate, onMove, onDelete
             <button type="button" onClick={() => onSelect(o.id)} className="flex-1 min-w-0 text-left truncate">
               {o.name}
               <span className="text-[11px] text-slate-400"> {OBJECT_TYPE_LABELS[o.type]}</span>
+              <span className="text-[11px]" title="⚡ 點擊有事件　⏳ 有出現條件或一開始隱藏">
+                {' '}
+                {interactionBadges(o)}
+              </span>
             </button>
             {o.id === selectedId && (
               <span className="flex gap-0.5 text-xs">
@@ -69,29 +94,15 @@ function LayersPanel({ objects, selectedId, onSelect, onUpdate, onMove, onDelete
   )
 }
 
-// ---------------------------------------------------------------- object properties
+// ---------------------------------------------------------------- object: 外觀 tab
 
-function Section({ title, hint, children }) {
-  return (
-    <div className="flex flex-col gap-1.5 border-t border-slate-200 pt-3">
-      <p className="text-sm font-bold">{title}</p>
-      {hint && <p className="text-xs text-slate-500">{hint}</p>}
-      {children}
-    </div>
-  )
-}
-
-function ObjectProperties({ object, assets, assetMap, ctx, onUpdate }) {
+function LookTab({ object, assets, assetMap, onUpdate, onPickIcon }) {
   const [picker, setPicker] = useState(null)
   const set = (patch) => onUpdate(object.id, patch, { key: `prop-${object.id}-${Object.keys(patch)[0]}` })
   const asset = object.assetId ? assetMap[object.assetId] : null
 
   return (
     <div className="flex flex-col gap-3">
-      <Field label="名稱（只有你看得到，方便辨認）">
-        <input value={object.name} onChange={(e) => set({ name: e.target.value })} className={inputClass} />
-      </Field>
-
       {object.type === 'image' && (
         <Field label="圖片素材">
           <button type="button" onClick={() => setPicker('image')} className="bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1.5 text-sm text-left truncate">
@@ -121,15 +132,15 @@ function ObjectProperties({ object, assets, assetMap, ctx, onUpdate }) {
       )}
 
       {object.type === 'icon' && (
-        <Field label="圖示（點選，或自己輸入一個表情符號）">
-          <div className="flex flex-wrap gap-1">
-            {ICON_CHOICES.map((c) => (
-              <button key={c} type="button" onClick={() => set({ icon: c })} className={`w-8 h-8 text-lg rounded ${object.icon === c ? 'bg-cyan/25 ring-1 ring-cyan' : 'hover:bg-slate-100'}`}>
-                {c}
-              </button>
-            ))}
-          </div>
-          <input value={object.icon} onChange={(e) => set({ icon: [...e.target.value].slice(-2).join('') })} className={`${inputClass} mt-1`} />
+        <Field label="圖示">
+          <button type="button" onClick={() => onPickIcon(object.id)} className="flex items-center gap-3 bg-slate-100 hover:bg-slate-200 rounded-xl px-3 py-2 text-left">
+            <span className="text-4xl leading-none">{object.icon}</span>
+            <span className="text-sm">
+              <b>更換圖示…</b>
+              <br />
+              <span className="text-xs text-slate-500">300 多個，可用名稱搜尋</span>
+            </span>
+          </button>
         </Field>
       )}
 
@@ -160,7 +171,11 @@ function ObjectProperties({ object, assets, assetMap, ctx, onUpdate }) {
         </>
       )}
 
-      {object.type === 'hotspot' && <p className="text-xs text-slate-500">隱形點擊區在學生畫面看不到，下方可以設定「點了會發生什麼事」。</p>}
+      {object.type === 'hotspot' && (
+        <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
+          隱形點擊區在學生畫面看不到，用來蓋在圖片的某個位置（例如照片裡的抽屜）。到「互動」分頁設定點了會發生什麼事。
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <NumField label="X" value={object.x} onChange={(v) => set({ x: v })} />
@@ -172,17 +187,6 @@ function ObjectProperties({ object, assets, assetMap, ctx, onUpdate }) {
           <input type="range" min={0} max={1} step={0.05} value={object.opacity} onChange={(e) => set({ opacity: Number(e.target.value) })} />
         </Field>
       </div>
-
-      <Section title="🖱️ 點擊時" hint="學生點這個物件時，依序執行這些動作。">
-        <EventEditor actions={object.onClick ?? []} onChange={(v) => onUpdate(object.id, { onClick: v }, { key: `onclick-${object.id}` })} ctx={ctx} />
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={!!object.logClick} onChange={(e) => onUpdate(object.id, { logClick: e.target.checked })} /> 記錄學生點擊（寫入學習紀錄）
-        </label>
-      </Section>
-
-      <Section title="👁 顯示條件" hint="沒有設定＝一直顯示（受上面圖層的「眼睛」控制）。設了條件，要條件成立才看得到。">
-        <ConditionEditor value={object.showWhen ?? null} onChange={(v) => onUpdate(object.id, { showWhen: v }, { key: `showwhen-${object.id}` })} />
-      </Section>
 
       {picker && (
         <AssetPicker
@@ -200,20 +204,93 @@ function ObjectProperties({ object, assets, assetMap, ctx, onUpdate }) {
   )
 }
 
+// ---------------------------------------------------------------- object: 互動 tab
+
+const VISIBILITY = [
+  { mode: 'always', icon: '👁', title: '一直看得到', desc: '遊戲一開始就在畫面上。' },
+  { mode: 'hidden', icon: '🙈', title: '一開始看不到', desc: '要靠某個動作「讓東西出現」才會現身，例如打開抽屜後露出線索。' },
+  { mode: 'when', icon: '⏳', title: '等某件事發生才看得到', desc: '條件一成立就自動出現，例如拿到鑰匙後，門才出現。' },
+]
+
+function InteractTab({ object, ctx, onUpdate }) {
+  const mode = object.showWhen ? 'when' : object.visible === false ? 'hidden' : 'always'
+  const objectCtx = { ...ctx, selfId: object.id, selfName: object.name }
+
+  function chooseMode(next) {
+    if (next === 'always') onUpdate(object.id, { visible: true, showWhen: null }, { important: true })
+    if (next === 'hidden') onUpdate(object.id, { visible: false, showWhen: null }, { important: true })
+    if (next === 'when') onUpdate(object.id, { visible: true, showWhen: object.showWhen ?? {} }, { important: true })
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <section className="flex flex-col gap-2">
+        <h3 className="font-bold text-sm">👀 學生什麼時候看得到它？</h3>
+        {VISIBILITY.map((v) => (
+          <label key={v.mode} className={`flex gap-2 rounded-lg border p-2 cursor-pointer ${mode === v.mode ? 'border-cyan bg-cyan/5' : 'border-slate-200 hover:bg-slate-50'}`}>
+            <input type="radio" name={`vis-${object.id}`} checked={mode === v.mode} onChange={() => chooseMode(v.mode)} className="mt-1" />
+            <span className="text-sm">
+              <b>
+                {v.icon} {v.title}
+              </b>
+              <span className="block text-xs text-slate-500">{v.desc}</span>
+            </span>
+          </label>
+        ))}
+        {mode === 'when' && (
+          <ConditionEditor
+            value={object.showWhen}
+            onChange={(v) => onUpdate(object.id, { showWhen: v ?? {} }, { key: `showwhen-${object.id}` })}
+            ctx={ctx}
+            emptyHint="還沒設條件，目前會一直看得到。請按下面「＋ 加一個條件」。"
+          />
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2 border-t border-slate-200 pt-3">
+        <h3 className="font-bold text-sm">🖱️ 學生點它的時候，會發生什麼事？</h3>
+        <p className="text-xs text-slate-500">沒有設定的話，點它不會有任何反應。步驟會從上往下一步一步做。</p>
+        <EventEditor actions={object.onClick ?? []} onChange={(v) => onUpdate(object.id, { onClick: v }, { key: `onclick-${object.id}` })} ctx={objectCtx} recipeKind="object" />
+        <label className="flex items-center gap-2 text-sm mt-1">
+          <input type="checkbox" checked={!!object.logClick} onChange={(e) => onUpdate(object.id, { logClick: e.target.checked })} /> 把學生點它的紀錄寫進學習資料
+        </label>
+      </section>
+    </div>
+  )
+}
+
+function ObjectProperties({ object, assets, assetMap, ctx, onUpdate, onPickIcon }) {
+  const [tab, setTab] = useState(object.type === 'hotspot' ? 'interact' : 'look')
+  return (
+    <div className="flex flex-col gap-3">
+      <Field label={`名稱（只有你看得到，方便辨認）　${OBJECT_TYPE_LABELS[object.type]}`}>
+        <input value={object.name} onChange={(e) => onUpdate(object.id, { name: e.target.value }, { key: `prop-${object.id}-name` })} className={inputClass} />
+      </Field>
+      <Tabs
+        tabs={[
+          { key: 'look', label: '外觀' },
+          { key: 'interact', label: '互動', badge: interactionBadges(object) },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+      {tab === 'look' ? <LookTab object={object} assets={assets} assetMap={assetMap} onUpdate={onUpdate} onPickIcon={onPickIcon} /> : <InteractTab object={object} ctx={ctx} onUpdate={onUpdate} />}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- scene properties
 
-function SceneProperties({ scene, scenes, stage, assets, assetMap, ctx, isStart, onUpdateScene, onSetExit, onSetStart, onStageTitle, onUpdateStage, onDuplicate, onDelete }) {
+function SceneTab({ scene, scenes, assetMap, assets, isStart, onUpdateScene, onSetStart, onDuplicate, onDelete }) {
   const [picker, setPicker] = useState(false)
   const background = scene.background
   const bgAsset = background?.type === 'image' ? assetMap[background.assetId] : null
-
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">沒有選取物件時，這裡是「場景」的設定。</p>
       <Field label="場景名稱">
         <input value={scene.name} onChange={(e) => onUpdateScene(scene.sceneId, { name: e.target.value }, { key: `scene-name-${scene.sceneId}` })} className={inputClass} />
       </Field>
-
       <Field label="背景">
         <div className="flex gap-1 items-center">
           <button type="button" onClick={() => setPicker(true)} className="flex-1 bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1.5 text-sm text-left truncate">
@@ -228,60 +305,6 @@ function SceneProperties({ scene, scenes, stage, assets, assetMap, ctx, isStart,
           />
         </div>
       </Field>
-
-      <div>
-        <p className="text-xs text-slate-500 mb-1">出口（往哪個方向走會到哪個場景；也可以在「場景關聯圖」拖線建立）</p>
-        <div className="grid grid-cols-2 gap-2">
-          {DIRECTIONS.map((d) => (
-            <Field key={d.key} label={`${d.arrow} ${d.label}`}>
-              <select value={scene.exits[d.key] ?? ''} onChange={(e) => onSetExit(scene.sceneId, d.key, e.target.value || null)} className={inputClass}>
-                <option value="">（無）</option>
-                {scenes
-                  .filter((s) => s.sceneId !== scene.sceneId)
-                  .map((s) => (
-                    <option key={s.sceneId} value={s.sceneId}>
-                      {s.name}
-                    </option>
-                  ))}
-              </select>
-            </Field>
-          ))}
-        </div>
-      </div>
-
-      {DIRECTIONS.some((d) => scene.exits[d.key]) && (
-        <Section title="🔒 出口通行條件" hint="沒有設定＝隨時可以走。設了條件，沒達成時顯示你寫的提示。">
-          {DIRECTIONS.filter((d) => scene.exits[d.key]).map((d) => {
-            const rule = scene.exitConditions?.[d.key] ?? {}
-            const setRule = (patch) => {
-              const next = { ...rule, ...patch }
-              const exitConditions = { ...(scene.exitConditions ?? {}) }
-              if (next.when || next.message) exitConditions[d.key] = next
-              else delete exitConditions[d.key]
-              onUpdateScene(scene.sceneId, { exitConditions }, { key: `exitrule-${scene.sceneId}-${d.key}` })
-            }
-            return (
-              <details key={d.key} open={!!rule.when} className="border border-slate-200 rounded-lg p-2">
-                <summary className="cursor-pointer text-sm">
-                  {d.arrow} {d.label}
-                  {rule.when ? '（有條件）' : ''}
-                </summary>
-                <div className="flex flex-col gap-2 mt-2">
-                  <ConditionEditor value={rule.when ?? null} onChange={(v) => setRule({ when: v })} />
-                  <Field label="沒達成時顯示的提示">
-                    <input value={rule.message ?? ''} onChange={(e) => setRule({ message: e.target.value })} placeholder="例如：先戴上護目鏡才能靠近抽氣櫃" className={inputClass} />
-                  </Field>
-                </div>
-              </details>
-            )
-          })}
-        </Section>
-      )}
-
-      <Section title="🎬 進入這個場景時" hint="每次學生走進這個場景都會執行。要只做一次，請搭配旗標與「如果…」。">
-        <EventEditor actions={scene.onEnter ?? []} onChange={(v) => onUpdateScene(scene.sceneId, { onEnter: v }, { key: `onenter-${scene.sceneId}` })} ctx={ctx} />
-      </Section>
-
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={isStart} onClick={() => onSetStart(scene.sceneId)} className="bg-slate-100 hover:bg-slate-200 disabled:opacity-60 rounded-lg px-3 py-1.5 text-sm">
           {isStart ? '★ 這是起始場景' : '設為起始場景'}
@@ -299,19 +322,7 @@ function SceneProperties({ scene, scenes, stage, assets, assetMap, ctx, isStart,
           刪除場景
         </button>
       </div>
-
-      <Section title="🏁 關卡" hint="目前一個任務只有一關。">
-        <Field label="關卡名稱">
-          <input value={stage.title} onChange={(e) => onStageTitle(e.target.value)} className={inputClass} />
-        </Field>
-        <Field label="開場說明（學生開始前會看到，可留空）">
-          <RichTextEditor key={stage.stageId} value={stage.intro ?? ''} onChange={(html) => onUpdateStage({ intro: html }, { key: 'stage-intro' })} minHeight={80} />
-        </Field>
-        <p className="text-xs text-slate-500">過關條件（條件成立就自動過關；也可以用「完成本關」動作過關。兩者都沒設，學生就無法過關）</p>
-        <ConditionEditor value={stage.completeWhen ?? null} onChange={(v) => onUpdateStage({ completeWhen: v }, { key: 'stage-completewhen' })} />
-        <p className="text-xs text-slate-500">過關後要執行的動作</p>
-        <EventEditor actions={stage.onComplete ?? []} onChange={(v) => onUpdateStage({ onComplete: v }, { key: 'stage-oncomplete' })} ctx={ctx} />
-      </Section>
+      <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">過關方式、開場說明，請按上方「🏁 關卡設定」。</p>
 
       {picker && (
         <AssetPicker
@@ -329,14 +340,94 @@ function SceneProperties({ scene, scenes, stage, assets, assetMap, ctx, isStart,
   )
 }
 
-export default function RightPanel({ scene, scenes, stage, object, assets, assetMap, ctx, actions }) {
+function ExitsTab({ scene, scenes, ctx, onUpdateScene, onSetExit }) {
   return (
-    <aside className="w-80 shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
-      <datalist id={FLAG_LIST_ID}>
-        {ctx.flags.map((f) => (
-          <option key={f} value={f} />
-        ))}
-      </datalist>
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-slate-500">學生會在畫面邊緣看到有出口的方向按鈕。也可以到上方「🗺️ 場景關聯圖」直接拖線建立。</p>
+      {DIRECTIONS.map((d) => {
+        const target = scene.exits[d.key]
+        const rule = scene.exitConditions?.[d.key] ?? {}
+        const hasRule = !!(rule.when || rule.message)
+        const setRule = (patch) => {
+          const next = { ...rule, ...patch }
+          const exitConditions = { ...(scene.exitConditions ?? {}) }
+          if (next.when || next.message) exitConditions[d.key] = next
+          else delete exitConditions[d.key]
+          onUpdateScene(scene.sceneId, { exitConditions }, { key: `exitrule-${scene.sceneId}-${d.key}` })
+        }
+        return (
+          <div key={d.key} className="border border-slate-200 rounded-lg p-2 flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold w-14 shrink-0">
+                {d.arrow} {d.label}
+              </span>
+              <select value={target ?? ''} onChange={(e) => onSetExit(scene.sceneId, d.key, e.target.value || null)} className={inputClass}>
+                <option value="">（這個方向沒有出口）</option>
+                {scenes
+                  .filter((s) => s.sceneId !== scene.sceneId)
+                  .map((s) => (
+                    <option key={s.sceneId} value={s.sceneId}>
+                      通往：{s.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            {target && (
+              <details open={hasRule} className="text-sm">
+                <summary className="cursor-pointer text-slate-600 hover:text-navy">{hasRule ? '🔒 有通行條件（點開修改）' : '🔓 隨時可以走（要設條件才能走？點這裡）'}</summary>
+                <div className="flex flex-col gap-2 mt-2">
+                  <p className="text-xs text-slate-500">例如「學生已經做過：戴上護目鏡」才能進入。</p>
+                  <ConditionEditor value={rule.when ?? null} onChange={(v) => setRule({ when: v })} ctx={ctx} emptyHint="沒有條件＝隨時可以走。" />
+                  <Field label="條件還沒達成時，學生按了會看到這句話：">
+                    <input value={rule.message ?? ''} onChange={(e) => setRule({ message: e.target.value })} placeholder="例如：先戴上護目鏡才能靠近抽氣櫃" className={inputClass} />
+                  </Field>
+                </div>
+              </details>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function SceneEventsTab({ scene, ctx, onUpdateScene }) {
+  const sceneCtx = { ...ctx, sceneName: scene.name }
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="font-bold text-sm">🎬 學生走進這個場景時，會發生什麼事？</h3>
+      <p className="text-xs text-slate-500">每次走進來都會做一次。想要「只在第一次」說話，請用下面的範例。沒有設定就什麼都不會發生。</p>
+      <EventEditor actions={scene.onEnter ?? []} onChange={(v) => onUpdateScene(scene.sceneId, { onEnter: v }, { key: `onenter-${scene.sceneId}` })} ctx={sceneCtx} recipeKind="scene" />
+    </div>
+  )
+}
+
+function SceneProperties({ scene, scenes, assets, assetMap, ctx, isStart, onUpdateScene, onSetExit, onSetStart, onDuplicate, onDelete }) {
+  const [tab, setTab] = useState('scene')
+  const exitCount = Object.values(scene.exits).filter(Boolean).length
+  return (
+    <div className="flex flex-col gap-3">
+      <Tabs
+        tabs={[
+          { key: 'scene', label: '場景' },
+          { key: 'exits', label: '出口', badge: exitCount ? String(exitCount) : '' },
+          { key: 'events', label: '進入時', badge: scene.onEnter?.length ? '⚡' : '' },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+      {tab === 'scene' && (
+        <SceneTab scene={scene} scenes={scenes} assets={assets} assetMap={assetMap} isStart={isStart} onUpdateScene={onUpdateScene} onSetStart={onSetStart} onDuplicate={onDuplicate} onDelete={onDelete} />
+      )}
+      {tab === 'exits' && <ExitsTab scene={scene} scenes={scenes} ctx={ctx} onUpdateScene={onUpdateScene} onSetExit={onSetExit} />}
+      {tab === 'events' && <SceneEventsTab scene={scene} ctx={ctx} onUpdateScene={onUpdateScene} />}
+    </div>
+  )
+}
+
+export default function RightPanel({ scene, scenes, stage, object, assets, assetMap, ctx, actions, onPickIcon }) {
+  return (
+    <aside className="w-[22rem] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
       <LayersPanel
         objects={scene.objects}
         selectedId={object?.id ?? null}
@@ -348,12 +439,12 @@ export default function RightPanel({ scene, scenes, stage, object, assets, asset
       />
       <div className="flex-1 overflow-y-auto p-3">
         {object ? (
-          <ObjectProperties key={object.id} object={object} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} />
+          <ObjectProperties key={object.id} object={object} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} onPickIcon={onPickIcon} />
         ) : (
           <SceneProperties
+            key={scene.sceneId}
             scene={scene}
             scenes={scenes}
-            stage={stage}
             assets={assets}
             assetMap={assetMap}
             ctx={ctx}
@@ -361,8 +452,6 @@ export default function RightPanel({ scene, scenes, stage, object, assets, asset
             onUpdateScene={actions.updateScene}
             onSetExit={(from, dir, to) => actions.setExit(from, dir, to, false)}
             onSetStart={actions.setStartScene}
-            onStageTitle={actions.setStageTitle}
-            onUpdateStage={actions.updateStage}
             onDuplicate={actions.duplicateScene}
             onDelete={actions.requestDeleteScene}
           />

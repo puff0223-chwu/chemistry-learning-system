@@ -23,8 +23,6 @@ export const OBJECT_TYPE_LABELS = {
   hotspot: '隱形點擊區',
 }
 
-export const ICON_CHOICES = ['🔑', '🔒', '🔓', '📦', '🧪', '⚗️', '🔬', '🔍', '💡', '📄', '📝', '📖', '🧤', '🥽', '🔥', '💧', '☠️', '⚠️', '❓', '❗', '⭐', '🚪', '🧰', '🩸', '👣', '🧬']
-
 export function genId(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
 }

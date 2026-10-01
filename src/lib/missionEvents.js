@@ -1,20 +1,26 @@
 // Unified event actions and conditions (spec-v5 §7). Shared by the editor (forms) and the player (executor).
+//
+// Teacher-facing vocabulary: the data still says "flag", but the editor calls it a「進度記號」: a note about
+// something the student has done ("拿到鑰匙"). Conditions read like sentences ("學生已經 拿到鑰匙").
 
-// Actions the editor offers today. The engine also understands add_item / remove_item / add_notebook /
-// complete_objective; those get editor forms in the phases that introduce items, notebook and objectives.
-export const ACTION_TYPES = [
-  { type: 'show_message', label: '顯示訊息' },
-  { type: 'goto_scene', label: '前往場景' },
-  { type: 'reveal_object', label: '顯示物件' },
-  { type: 'hide_object', label: '隱藏物件' },
-  { type: 'set_flag', label: '設定旗標（記住某件事發生了）' },
-  { type: 'clear_flag', label: '清除旗標' },
-  { type: 'swap_background', label: '更換場景背景' },
-  { type: 'play_sound', label: '播放音效' },
-  { type: 'delay', label: '等待一下' },
-  { type: 'complete_stage', label: '完成本關（過關）' },
-  { type: 'if', label: '如果…就…否則…（條件分支）' },
+// What the editor offers when adding an action. `category` picks the colour stripe in the editor.
+// The engine also understands add_item / remove_item / add_notebook / complete_objective; those get editor
+// forms in the phases that introduce items, notebook and objectives.
+export const ACTION_META = [
+  { type: 'show_message', icon: '💬', label: '說話', desc: '顯示一段話給學生看', category: 'talk' },
+  { type: 'goto_scene', icon: '🚶', label: '去別的場景', desc: '帶學生走到另一個場景', category: 'move' },
+  { type: 'reveal_object', icon: '✨', label: '讓東西出現', desc: '讓一個隱藏的物件現身', category: 'object' },
+  { type: 'hide_object', icon: '🙈', label: '讓東西消失', desc: '讓一個物件從畫面上不見', category: 'object' },
+  { type: 'swap_background', icon: '🖼️', label: '換背景', desc: '把某個場景的背景換成別張圖', category: 'object' },
+  { type: 'set_flag', icon: '📌', label: '記住一件事', desc: '記下「學生做過這件事」（進度記號）', category: 'memory' },
+  { type: 'clear_flag', icon: '🧽', label: '忘記一件事', desc: '把某個進度記號擦掉', category: 'memory' },
+  { type: 'if', icon: '🔀', label: '如果…就…', desc: '依情況做不同的事', category: 'flow' },
+  { type: 'play_sound', icon: '🔊', label: '播放音效', desc: '播放素材庫裡的音訊', category: 'flow' },
+  { type: 'delay', icon: '⏱️', label: '等一下', desc: '停幾秒再做下一件事', category: 'flow' },
+  { type: 'complete_stage', icon: '🏁', label: '讓學生過關', desc: '學生完成這一關', category: 'goal' },
 ]
+export const ACTION_TYPES = ACTION_META.map(({ type, label }) => ({ type, label }))
+export const actionMeta = (type) => ACTION_META.find((m) => m.type === type)
 
 // Actions the engine cannot run yet (their blocks arrive later); they are skipped with a console note.
 export const DEFERRED_ACTIONS = ['set_state', 'open_lock', 'open_workbench']
@@ -59,11 +65,13 @@ export const isBranch = (a) => a && typeof a === 'object' && 'if' in a
 export const actionTypeOf = (a) => (isBranch(a) ? 'if' : a.action)
 
 const FLAG_KEYS = ['allFlags', 'anyFlags', 'notFlags']
+// Empty names are placeholders the editor keeps while a teacher is still choosing; the game ignores them.
+const names = (list) => (list ?? []).filter(Boolean)
 
 export function isEmptyCondition(c) {
   if (!c) return true
   return (
-    FLAG_KEYS.every((k) => !(c[k]?.length > 0)) &&
+    FLAG_KEYS.every((k) => names(c[k]).length === 0) &&
     !(c.hasItems?.length > 0) &&
     !(c.objectivesDone?.length > 0) &&
     !(c.notebookCountAtLeast > 0) &&
@@ -76,9 +84,12 @@ export function isEmptyCondition(c) {
 export function evalCondition(c, view) {
   if (isEmptyCondition(c)) return true
   const has = (flag) => view.flags[flag] === true
-  if (c.allFlags?.length && !c.allFlags.every(has)) return false
-  if (c.anyFlags?.length && !c.anyFlags.some(has)) return false
-  if (c.notFlags?.length && c.notFlags.some(has)) return false
+  const all = names(c.allFlags)
+  const any = names(c.anyFlags)
+  const none = names(c.notFlags)
+  if (all.length && !all.every(has)) return false
+  if (any.length && !any.some(has)) return false
+  if (none.length && none.some(has)) return false
   if (c.hasItems?.length && !c.hasItems.every((id) => view.items.includes(id))) return false
   if (c.objectivesDone?.length && !c.objectivesDone.every((id) => view.objectivesDone.includes(id))) return false
   if (c.notebookCountAtLeast > 0 && view.notebookCount < c.notebookCountAtLeast) return false
@@ -98,53 +109,147 @@ export function walkActions(actions, fn) {
   }
 }
 
-// Every place in the mission that holds an event list or a condition.
-// Returns { actionLists: [list], conditions: [cond] } so checkers do not each re-implement the traversal.
-export function collectEventSources(data) {
-  const actionLists = []
-  const conditions = []
-  const addList = (list) => {
-    if (!list?.length) return
-    actionLists.push(list)
-    const scan = (items) => {
-      for (const a of items) {
-        if (isBranch(a)) {
-          conditions.push(a.if)
-          scan(a.then ?? [])
-          scan(a.else ?? [])
-        }
-      }
-    }
-    scan(list)
-  }
-  for (const stage of data.stages) {
-    addList(stage.onComplete)
-    if (stage.completeWhen) conditions.push(stage.completeWhen)
-    for (const scene of stage.scenes) {
-      addList(scene.onEnter)
-      for (const ex of Object.values(scene.exitConditions ?? {})) if (ex?.when) conditions.push(ex.when)
-      for (const o of scene.objects) {
-        addList(o.onClick)
-        if (o.showWhen) conditions.push(o.showWhen)
-      }
+function branchConditions(list, into = []) {
+  for (const a of list ?? []) {
+    if (isBranch(a)) {
+      into.push(a.if)
+      branchConditions(a.then, into)
+      branchConditions(a.else, into)
     }
   }
-  return { actionLists, conditions }
+  return into
 }
 
-// Flags set or used anywhere (for the editor's suggestion list and the preview panel).
-export function collectFlags(data) {
-  const flags = new Set()
-  const { actionLists, conditions } = collectEventSources(data)
-  for (const list of actionLists) {
-    walkActions(list, (a) => {
-      if ((a.action === 'set_flag' || a.action === 'clear_flag') && a.flag) flags.add(a.flag)
-    })
+// Every place in the mission that holds an event list or a condition, each with a teacher-readable label:
+// [{ label, actions: [...], conditions: [...] }]. One traversal shared by the health check, the
+// progress-marker manager and the stage dialog, so they can never disagree about where events live.
+export function listSources(data) {
+  const out = []
+  const stage = data.stages[0]
+  const addActions = (label, list) => {
+    if (list?.length) out.push({ label, actions: list, conditions: branchConditions(list) })
   }
-  for (const c of conditions) for (const k of FLAG_KEYS) for (const f of c?.[k] ?? []) if (f) flags.add(f)
-  return [...flags].sort()
+  const addCondition = (label, cond) => {
+    if (cond) out.push({ label, actions: [], conditions: [cond] })
+  }
+  addCondition('關卡的「自動過關條件」', stage.completeWhen)
+  addActions('關卡「過關後」', stage.onComplete)
+  for (const scene of stage.scenes) {
+    addActions(`場景「${scene.name}」進入時`, scene.onEnter)
+    for (const [dir, rule] of Object.entries(scene.exitConditions ?? {})) addCondition(`場景「${scene.name}」的出口條件（${dir}）`, rule?.when)
+    for (const o of scene.objects) {
+      addActions(`場景「${scene.name}」的「${o.name}」被點擊時`, o.onClick)
+      addCondition(`場景「${scene.name}」的「${o.name}」的出現條件`, o.showWhen)
+    }
+  }
+  return out
+}
+
+export function collectEventSources(data) {
+  const sources = listSources(data)
+  return { actionLists: sources.filter((s) => s.actions.length).map((s) => s.actions), conditions: sources.flatMap((s) => s.conditions) }
+}
+
+// Progress markers set or used anywhere (for the editor's pick lists).
+export function collectFlags(data) {
+  return [...flagUsage(data).keys()].sort()
+}
+
+// name -> { sets: [label], uses: [label] }: where each marker is remembered and where it is checked.
+export function flagUsage(data) {
+  const usage = new Map()
+  const entry = (name) => {
+    if (!usage.has(name)) usage.set(name, { sets: [], uses: [] })
+    return usage.get(name)
+  }
+  for (const source of listSources(data)) {
+    walkActions(source.actions, (a) => {
+      if (a.action === 'set_flag' && a.flag) entry(a.flag).sets.push(source.label)
+      if (a.action === 'clear_flag' && a.flag) entry(a.flag).uses.push(`${source.label}（忘記）`)
+    })
+    for (const c of source.conditions) for (const k of FLAG_KEYS) for (const f of names(c?.[k])) entry(f).uses.push(source.label)
+  }
+  return usage
+}
+
+// Renames a marker everywhere (events and conditions). Returns a new mission data object.
+export function renameFlag(data, from, to) {
+  const copy = structuredClone(data)
+  const walk = (node) => {
+    if (Array.isArray(node)) node.forEach(walk)
+    else if (node && typeof node === 'object') {
+      if ((node.action === 'set_flag' || node.action === 'clear_flag') && node.flag === from) node.flag = to
+      for (const k of FLAG_KEYS) if (Array.isArray(node[k])) node[k] = node[k].map((f) => (f === from ? to : f))
+      Object.values(node).forEach(walk)
+    }
+  }
+  walk(copy.stages)
+  return copy
+}
+
+// Places where the stage can currently be completed by an event ("完成本關").
+export function completionSources(data) {
+  const found = []
+  for (const source of listSources(data)) {
+    let has = false
+    walkActions(source.actions, (a) => {
+      if (a.action === 'complete_stage') has = true
+    })
+    if (has) found.push(source.label)
+  }
+  return found
 }
 
 export function usesElapsedTime(data) {
-  return collectEventSources(data).conditions.some((c) => c?.elapsedSecondsAtLeast > 0)
+  return listSources(data).some((s) => s.conditions.some((c) => c?.elapsedSecondsAtLeast > 0))
+}
+
+// ---- plain-language descriptions ------------------------------------------------------------------
+
+const quote = (t) => `「${t}」`
+const clip = (t, n = 14) => (t.length > n ? `${t.slice(0, n)}…` : t)
+
+// "學生已經 拿到鑰匙，而且 還沒 打開門" — shown under every condition so the teacher can check their own meaning.
+export function describeCondition(c) {
+  if (isEmptyCondition(c)) return '沒有任何限制'
+  const parts = []
+  const all = names(c.allFlags)
+  const any = names(c.anyFlags)
+  const none = names(c.notFlags)
+  if (all.length) parts.push(`已經${all.map(quote).join('、')}`)
+  if (none.length) parts.push(`還沒${none.map(quote).join('、')}`)
+  if (any.length) parts.push(`${any.map(quote).join('、')}其中一件已經發生`)
+  if (c.elapsedSecondsAtLeast > 0) parts.push(`遊戲開始超過 ${c.elapsedSecondsAtLeast} 秒`)
+  return `學生${parts.join('，而且')}`
+}
+
+// One short phrase per action, for summaries ("說「…」→ 記住「拿到鑰匙」→ 讓「鑰匙」消失").
+export function describeAction(a, ctx) {
+  const scene = (id) => ctx.scenes.find((s) => s.sceneId === id)?.name ?? '？'
+  const object = (id) => ctx.objects.find((o) => o.id === id)?.name ?? '？'
+  if (isBranch(a)) return '如果…就…'
+  switch (a.action) {
+    case 'show_message':
+      return `說${quote(clip(a.message || '…'))}`
+    case 'goto_scene':
+      return `去${quote(scene(a.sceneId))}`
+    case 'reveal_object':
+      return `讓${quote(object(a.target))}出現`
+    case 'hide_object':
+      return `讓${quote(object(a.target))}消失`
+    case 'set_flag':
+      return `記住${quote(a.flag || '？')}`
+    case 'clear_flag':
+      return `忘記${quote(a.flag || '？')}`
+    case 'swap_background':
+      return `換${quote(scene(a.sceneId))}的背景`
+    case 'play_sound':
+      return '播放音效'
+    case 'delay':
+      return `等 ${(a.ms ?? 0) / 1000} 秒`
+    case 'complete_stage':
+      return '讓學生過關'
+    default:
+      return a.action
+  }
 }

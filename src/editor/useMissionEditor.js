@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { renameFlag } from '../lib/missionEvents.js'
 import { createObject, createScene, emptyExits, genId, normalizeDraft, withZIndex, OPPOSITE } from '../lib/missionSchema.js'
 
 const HISTORY_LIMIT = 50 // spec-v5 §6.3: at least 50 undo steps
@@ -276,6 +277,9 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
         { important: false },
       )
     },
+
+    // Renames a progress marker everywhere it is remembered or checked.
+    renameFlag: (from, to) => commit(renameFlag(draftRef.current, from, to), { important: true }),
 
     replaceDraft: (raw) => {
       const next = normalizeDraft(raw)
