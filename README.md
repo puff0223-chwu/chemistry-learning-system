@@ -29,6 +29,7 @@ npm run dev
 5. 到 **Storage** 建立兩個 **public** bucket：`question-images`（題目圖片）、`site-backgrounds`（背景圖），再執行 [`supabase/storage.sql`](supabase/storage.sql) 開放登入的老師上傳。
 6. （可選）執行 [`supabase/seed.sql`](supabase/seed.sql) 插入示範資料，或直接透過老師後台新增。
 7. 執行 [`supabase/phase1-missions.sql`](supabase/phase1-missions.sql)（科學任務偵探所第 1 階段）：建立 `missions`、`mission_categories`、`mission_assets`、`mission_logs`、`mission_submissions`、檢視表 `published_missions`、`student_sessions` 新欄位與 Storage bucket `mission-assets`。可重複執行，不影響既有資料。
+8. 執行 [`supabase/phase2-assets.sql`](supabase/phase2-assets.sql)（第 2 階段素材庫）：素材名稱欄位、路徑唯一索引與「使用中」檢查函式。可重複執行。
 
 ### 為什麼老師後台用 Supabase Auth 登入，而不是規格書寫的「純前端密碼比對＋secret key」？
 

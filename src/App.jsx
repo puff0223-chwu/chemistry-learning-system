@@ -11,6 +11,7 @@ import AdminResetPassword from './pages/AdminResetPassword.jsx'
 import RequireAdmin from './components/RequireAdmin.jsx'
 
 // Admin pages (rich-text editor, Excel export, ...) are only downloaded when a teacher opens them.
+const AdminAssets = lazy(() => import('./pages/AdminAssets.jsx'))
 const AdminMissions = lazy(() => import('./pages/AdminMissions.jsx'))
 const AdminMissionCategories = lazy(() => import('./pages/AdminMissionCategories.jsx'))
 const AdminTopics = lazy(() => import('./pages/AdminTopics.jsx'))
@@ -37,6 +38,7 @@ function App() {
         <Route path="/battle/:topicId" element={<BattlePlay />} />
         <Route path="/admin" element={<AdminLogin />} />
         <Route path="/admin/reset-password" element={<AdminResetPassword />} />
+        <Route path="/admin/assets" element={admin(<AdminAssets />)} />
         <Route path="/admin/missions" element={admin(<AdminMissions />)} />
         <Route path="/admin/mission-categories" element={admin(<AdminMissionCategories />)} />
         <Route path="/admin/topics" element={admin(<AdminTopics />)} />

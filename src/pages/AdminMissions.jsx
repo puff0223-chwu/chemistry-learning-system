@@ -11,6 +11,7 @@ import {
   fetchMissions,
   updateMissionInfo,
 } from '../lib/missions.js'
+import { deleteAssets, fetchAssetsInUse, fetchMissionAssets, formatBytes } from '../lib/assets.js'
 
 const STATUS_STYLES = {
   draft: 'bg-slate-100 text-slate-600',
@@ -93,6 +94,9 @@ export default function AdminMissions() {
   const [filter, setFilter] = useState('all')
   const [form, setForm] = useState(null) // { mission } while the form dialog is open
   const [deleteTarget, setDeleteTarget] = useState(null)
+  // Assets that belong only to the mission being deleted: { missionId, removable, kept }
+  const [ownedAssets, setOwnedAssets] = useState(null)
+  const [alsoDeleteAssets, setAlsoDeleteAssets] = useState(false)
   const [busy, setBusy] = useState(false)
   const [dialogError, setDialogError] = useState(null)
 
@@ -134,6 +138,41 @@ export default function AdminMissions() {
     run(
       () => (target ? updateMissionInfo(target.id, values) : createMission(values)),
       { onDone: () => setForm(null) },
+    )
+  }
+
+  // Looks up the assets owned by this mission. Ones still referenced by another mission (for example a
+  // duplicate that copied the draft) are kept, so deleting one mission never breaks another.
+  async function openDelete(mission) {
+    setDialogError(null)
+    setAlsoDeleteAssets(false)
+    setOwnedAssets(null)
+    setDeleteTarget(mission)
+    try {
+      const owned = await fetchMissionAssets(mission.id)
+      const stillUsed = await fetchAssetsInUse(
+        owned.map((a) => a.id),
+        mission.id,
+      )
+      setOwnedAssets({
+        missionId: mission.id,
+        removable: owned.filter((a) => !stillUsed.has(a.id)),
+        kept: owned.filter((a) => stillUsed.has(a.id)),
+      })
+    } catch (err) {
+      setDialogError(`查詢素材失敗：${err.message}`)
+    }
+  }
+
+  async function confirmDelete() {
+    const removable = alsoDeleteAssets && ownedAssets?.missionId === deleteTarget.id ? ownedAssets.removable : []
+    // Assets first: once the mission is gone their link to it is cleared and they turn into shared assets.
+    await run(
+      async () => {
+        await deleteAssets(removable)
+        await deleteMission(deleteTarget.id)
+      },
+      { onDone: () => setDeleteTarget(null) },
     )
   }
 
@@ -236,7 +275,7 @@ export default function AdminMissions() {
                   type="button"
                   onClick={() => {
                     setDialogError(null)
-                    setDeleteTarget(m)
+                    openDelete(m)
                   }}
                   className="bg-red-50 hover:bg-red-100 text-red-700 rounded-lg px-3 py-1.5 text-sm"
                 >
@@ -267,8 +306,32 @@ export default function AdminMissions() {
           busy={busy}
           error={dialogError}
           onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => run(() => deleteMission(deleteTarget.id), { onDone: () => setDeleteTarget(null) })}
-        />
+          onConfirm={confirmDelete}
+        >
+          {ownedAssets?.missionId === deleteTarget.id && ownedAssets.removable.length + ownedAssets.kept.length > 0 && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm flex flex-col gap-2">
+              {ownedAssets.removable.length > 0 && (
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={alsoDeleteAssets}
+                    onChange={(e) => setAlsoDeleteAssets(e.target.checked)}
+                    className="mt-1"
+                  />
+                  <span>
+                    一併刪除只屬於這個任務的 {ownedAssets.removable.length} 個素材（共{' '}
+                    {formatBytes(ownedAssets.removable.reduce((sum, a) => sum + a.bytes, 0))}）
+                    <br />
+                    <span className="text-slate-500">不勾選的話，這些素材會留在素材庫，變成共用素材。</span>
+                  </span>
+                </label>
+              )}
+              {ownedAssets.kept.length > 0 && (
+                <p className="text-slate-500">另有 {ownedAssets.kept.length} 個素材仍被其他任務使用，會保留。</p>
+              )}
+            </div>
+          )}
+        </ConfirmDialog>
       )}
     </div>
   )

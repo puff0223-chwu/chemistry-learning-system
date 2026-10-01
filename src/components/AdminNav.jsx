@@ -37,6 +37,9 @@ export default function AdminNav({ active }) {
       <NavLink to="/admin/missions" active={active} current="missions">
         任務列表
       </NavLink>
+      <NavLink to="/admin/assets" active={active} current="assets">
+        素材庫
+      </NavLink>
       <NavLink to="/admin/mission-categories" active={active} current="mission-categories">
         分類管理
       </NavLink>
