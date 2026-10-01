@@ -6,6 +6,7 @@ import { assetUrl } from '../lib/assets.js'
 import { collectFlags, usesElapsedTime } from '../lib/missionEvents.js'
 import { CANVAS_H, CANVAS_W, DIRECTIONS } from '../lib/missionSchema.js'
 import LockDialog from './LockDialog.jsx'
+import { ObjectivesBar, StageMapScreen } from './StageUi.jsx'
 
 const TRANSITION_MS = 450
 
@@ -121,12 +122,13 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   const [messages, setMessages] = useState([])
   const [muted, setMuted] = useState(false)
   const mutedRef = useRef(false)
-  const [phase, setPhase] = useState(() => (!engine.resumed && hasText(stage.intro) ? 'intro' : 'run'))
+  const [intro, setIntro] = useState(null) // { stage, resolve } while a stage's opening text is showing
   const [confirmExit, setConfirmExit] = useState(false)
   const [lockOpen, setLockOpen] = useState(null) // { id, resolve } while a lock's dialog is showing
   const [debugOpen, setDebugOpen] = useState(mode === 'preview')
 
-  const flags = useMemo(() => (mode === 'preview' ? collectFlags({ stages: [stage] }) : []), [mode, stage])
+  const onMap = !scene && engine.multiStage // standing at the stage map
+  const flags = useMemo(() => (mode === 'preview' ? collectFlags(engine.mission) : []), [mode, engine])
 
   useEffect(() => {
     mutedRef.current = muted
@@ -135,7 +137,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   // Fit the 1600x900 scene into whatever screen we have.
   useEffect(() => {
     const el = boxRef.current
-    if (!el) return
+    if (!el) return // not on screen while the stage map is showing
     const measure = () => {
       setScale(Math.min(el.clientWidth / CANVAS_W, el.clientHeight / CANVAS_H))
       setPortrait(el.clientHeight > el.clientWidth * 1.1) // a tall screen shows the 16:9 scene small
@@ -144,12 +146,13 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [onMap])
 
   // The engine asks the UI to show messages and play sounds.
   useEffect(() => {
     engine.ui = {
       message: (text) => new Promise((resolve) => setMessages((list) => [...list, { text, resolve }])),
+      intro: (st) => new Promise((resolve) => setIntro({ stage: st, resolve })),
       lock: (id) => new Promise((resolve) => setLockOpen({ id, resolve })),
       closeLock: () =>
         setLockOpen((cur) => {
@@ -164,13 +167,13 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
     }
   }, [engine, assets])
 
-  // Start once (after the intro), even if React remounts us in development.
+  // Start once, even if React remounts us in development.
   useEffect(() => {
-    if (phase !== 'run' || engine.startedOnce) return
+    if (engine.startedOnce) return
     engine.startedOnce = true
     // the editor's "試答看看" opens one question as soon as the game has started
     engine.start().then(() => engine.autoOpenLock && engine.openLock(engine.autoOpenLock))
-  }, [phase, engine])
+  }, [engine])
 
   // Animate scene changes: keep the old scene underneath while the new one slides/fades in.
   const transition = state.transition
@@ -182,7 +185,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   }, [transition])
 
   // Only needed when some condition depends on elapsed time.
-  const ticking = useMemo(() => usesElapsedTime({ stages: [stage] }), [stage])
+  const ticking = useMemo(() => usesElapsedTime(engine.mission), [engine])
   useEffect(() => {
     if (!ticking) return
     const timer = setInterval(() => engine.tick(), 1000)
@@ -204,9 +207,9 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
     return () => window.removeEventListener('keydown', onKey)
   }, [messages.length, dismissMessage])
 
-  const blocked = messages.length > 0 || phase === 'intro' || state.missionDone || !!lockOpen
+  const blocked = messages.length > 0 || !!intro || state.missionDone || !!lockOpen
 
-  if (!scene) {
+  if (!scene && !onMap) {
     return (
       <div className="fixed inset-0 bg-black text-white flex flex-col items-center justify-center gap-4">
         <p className="text-xl">這個任務還沒有可以玩的場景。</p>
@@ -219,14 +222,16 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
 
   // The scene's background decides what lies beyond its frame: a plain colour fills the whole screen with that colour,
   // a picture is mirrored outwards (see Backdrop).
-  const sceneBackground = engine.background(scene)
-  const screenColor = sceneBackground?.type === 'color' ? sceneBackground.color : '#000'
+  const sceneBackground = scene ? engine.background(scene) : null
+  const screenColor = onMap ? '#0f172a' : sceneBackground?.type === 'color' ? sceneBackground.color : '#000'
 
   const seconds = engine.elapsedSeconds()
   const sceneProps = { assets, interactive: true, isVisible: engine.isVisible, isSolved: (id) => engine.lockState(id).solved, onObjectClick: (o) => !blocked && engine.clickObject(o) }
 
   return (
     <div className="fixed inset-0 overflow-hidden select-none z-40" style={{ touchAction: 'manipulation', background: screenColor }}>
+      {onMap && <StageMapScreen engine={engine} state={state} />}
+      {!onMap && (
       <div ref={boxRef} className="absolute inset-0 flex items-center justify-center">
         <div className="relative" style={{ width: CANVAS_W * scale, height: CANVAS_H * scale }}>
           <Backdrop background={sceneBackground} assets={assets} />
@@ -255,12 +260,23 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
           </div>
         </div>
       </div>
+      )}
+
+      {!onMap && <ObjectivesBar engine={engine} />}
 
       <div className="absolute top-3 left-3 right-3 z-30 flex items-center gap-2 pointer-events-none">
         <button type="button" onClick={() => setConfirmExit(true)} className="pointer-events-auto bg-black/50 hover:bg-black/70 text-white rounded-full px-4 py-2 text-sm">
           ← {mode === 'preview' ? '結束試玩' : '離開'}
         </button>
-        <span className="text-white/80 text-sm truncate drop-shadow">{title}</span>
+        {engine.multiStage && !onMap && (
+          <button type="button" onClick={() => engine.leaveStage()} className="pointer-events-auto bg-black/50 hover:bg-black/70 text-white rounded-full px-4 py-2 text-sm whitespace-nowrap">
+            🧭 關卡地圖
+          </button>
+        )}
+        <span className="text-white/80 text-sm truncate drop-shadow">
+          {title}
+          {engine.multiStage && !onMap ? ` ・ ${stage.title}` : ''}
+        </span>
         <span className="flex-1" />
         <span className="text-white/70 text-sm tabular-nums drop-shadow">
           {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
@@ -286,12 +302,19 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
 
       {mode === 'preview' && debugOpen && <DebugPanel engine={engine} state={state} scenes={stage.scenes} flags={flags} onClose={() => setDebugOpen(false)} />}
 
-      {phase === 'intro' && (
+      {intro && (
         <div className="absolute inset-0 z-50 flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0, 10, 30, 0.85)' }}>
           <div className="bg-white text-navy rounded-2xl p-6 w-full max-w-xl max-h-[80%] overflow-y-auto flex flex-col gap-4 shadow-2xl">
-            <h2 className="text-xl font-bold">{stage.title}</h2>
-            <RichContent html={stage.intro} className="text-lg leading-relaxed" />
-            <button type="button" onClick={() => setPhase('run')} className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-4 py-3 text-lg font-bold">
+            <h2 className="text-xl font-bold">{intro.stage.title}</h2>
+            <RichContent html={intro.stage.intro} className="text-lg leading-relaxed" />
+            <button
+              type="button"
+              onClick={() => {
+                intro.resolve()
+                setIntro(null)
+              }}
+              className="bg-cyan hover:bg-cyan-dark text-white rounded-xl px-4 py-3 text-lg font-bold"
+            >
               開始
             </button>
           </div>

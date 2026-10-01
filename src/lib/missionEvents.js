@@ -79,7 +79,7 @@ export function isEmptyCondition(c) {
   return (
     FLAG_KEYS.every((k) => names(c[k]).length === 0) &&
     !(c.hasItems?.length > 0) &&
-    !(c.objectivesDone?.length > 0) &&
+    names(c.objectivesDone).length === 0 &&
     !(c.notebookCountAtLeast > 0) &&
     !(c.elapsedSecondsAtLeast > 0)
   )
@@ -97,7 +97,8 @@ export function evalCondition(c, view) {
   if (any.length && !any.some(has)) return false
   if (none.length && none.some(has)) return false
   if (c.hasItems?.length && !c.hasItems.every((id) => view.items.includes(id))) return false
-  if (c.objectivesDone?.length && !c.objectivesDone.every((id) => view.objectivesDone.includes(id))) return false
+  const goals = names(c.objectivesDone)
+  if (goals.length && !goals.every((id) => view.objectivesDone.includes(id))) return false
   if (c.notebookCountAtLeast > 0 && view.notebookCount < c.notebookCountAtLeast) return false
   if (c.elapsedSecondsAtLeast > 0 && view.elapsedSeconds < c.elapsedSecondsAtLeast) return false
   return true
@@ -244,7 +245,7 @@ export function describeCondition(c, ctx = null) {
   if (all.length) parts.push(`已經${all.map(quote).join('、')}`)
   if (none.length) parts.push(`還沒${none.map(quote).join('、')}`)
   if (any.length) parts.push(`${any.map(quote).join('、')}其中一件已經發生`)
-  if (c.objectivesDone?.length) parts.push(`已完成目標${c.objectivesDone.map((id) => quote(ctx?.objectives?.find((o) => o.id === id)?.text ?? '？')).join('、')}`)
+  if (names(c.objectivesDone).length) parts.push(`已完成目標${names(c.objectivesDone).map((id) => quote(ctx?.objectives?.find((o) => o.id === id)?.text ?? '？')).join('、')}`)
   if (c.elapsedSecondsAtLeast > 0) parts.push(`遊戲開始超過 ${c.elapsedSecondsAtLeast} 秒`)
   return `學生${parts.join('，而且')}`
 }

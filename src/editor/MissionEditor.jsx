@@ -13,7 +13,8 @@ import RightPanel from './RightPanel.jsx'
 import SceneCanvas from './SceneCanvas.jsx'
 import SceneGraph from './SceneGraph.jsx'
 import StageDialog from './StageDialog.jsx'
-import useMissionEditor, { getStage } from './useMissionEditor.js'
+import StageMap from './StageMap.jsx'
+import useMissionEditor from './useMissionEditor.js'
 
 const ZOOMS = [
   { value: 'fit', label: '適合' },
@@ -37,8 +38,8 @@ function statusText(status, savedAt, saveError) {
 // and the save / upload functions, so it can also be exercised on its own.
 export default function MissionEditor({ missionId, title, initialDraft, initialAssets, save, upload, check, publish, onBack }) {
   const editor = useMissionEditor({ initialDraft, save, storageKey: `mission-draft-${missionId}` })
-  const { draft, scene, object, objectIds, sceneId, status, savedAt, saveError, canUndo, canRedo, actions } = editor
-  const stage = getStage(draft)
+  const { draft, stage, scene, object, objectIds, sceneId, status, savedAt, saveError, canUndo, canRedo, actions } = editor
+  const multiStage = draft.stages.length > 1
 
   const [assets, setAssets] = useState(initialAssets)
   const assetMap = useMemo(() => Object.fromEntries(assets.map((a) => [a.id, a])), [assets])
@@ -52,6 +53,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   const [message, setMessage] = useState(null)
   const [iconPickerFor, setIconPickerFor] = useState(null) // object id while choosing an icon
   const [stageOpen, setStageOpen] = useState(false)
+  const [stageTab, setStageTab] = useState('flow')
   const [flagsOpen, setFlagsOpen] = useState(false)
   const [preview, setPreview] = useState(null) // GameEngine while test-playing
   const [publishState, setPublishState] = useState(null) // { phase: 'checking' | 'report' | 'publishing', result? }
@@ -194,6 +196,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
       objects: stage.scenes.flatMap((sc) => sc.objects.map((o) => ({ id: o.id, name: o.name, type: o.type, sceneName: sc.name }))),
       groups: stage.scenes.flatMap((sc) => (sc.groups ?? []).map((g) => ({ id: g.id, name: g.name, sceneName: sc.name }))),
       flags: collectFlags(draft),
+      objectives: draft.stages.flatMap((st) => (st.objectives ?? []).map((o) => ({ id: o.objectiveId, text: o.text || '（還沒命名的目標）', stageTitle: st.title }))),
       assets,
     }),
     [stage, draft, assets],
@@ -218,14 +221,14 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
 
   function startPreview() {
     if (!scene) return
-    setPreview(new GameEngine({ stage, startSceneId: scene.sceneId }))
+    setPreview(new GameEngine({ mission: draft, startSceneId: scene.sceneId }))
   }
 
   // "試答看看": test-play from the lock's own scene and open just that question.
   function previewLock(lockId) {
     const home = stage.scenes.find((sc) => sc.objects.some((o) => o.id === lockId))
     if (!home) return
-    const engine = new GameEngine({ stage, startSceneId: home.sceneId })
+    const engine = new GameEngine({ mission: draft, startSceneId: home.sceneId })
     engine.autoOpenLock = lockId
     setPreview(engine)
   }
@@ -275,6 +278,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           {[
             ['canvas', '🎨 畫布'],
             ['graph', '🗺️ 場景關聯圖'],
+            ...(multiStage ? [['stages', '🧭 關卡地圖']] : []),
           ].map(([key, label]) => (
             <button key={key} type="button" onClick={() => setView(key)} className={`px-3 py-1 ${view === key ? 'bg-cyan text-white' : 'hover:bg-white/10'}`}>
               {label}
@@ -289,8 +293,47 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
             ↷ 重做
           </button>
         </div>
+        {multiStage ? (
+          <label className="flex items-center gap-1 text-sm" title="目前正在編輯哪一關">
+            <span className="text-[#c9d6e6]">編輯：</span>
+            <select
+              value={stage.stageId}
+              onChange={(e) => {
+                actions.selectStage(e.target.value)
+                if (view === 'stages') setView('canvas')
+              }}
+              className="bg-white/10 rounded px-2 py-1 max-w-[10rem]"
+            >
+              {draft.stages.map((st) => (
+                <option key={st.stageId} value={st.stageId} className="text-navy">
+                  {st.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              actions.addStage()
+              setView('stages')
+            }}
+            title="把任務分成好幾關（可以排成一條線、分支或同時開放）"
+            className="px-2 py-1 rounded hover:bg-white/10 text-sm"
+          >
+            ＋ 新增關卡
+          </button>
+        )}
         <div className="flex gap-1">
-          <button type="button" onClick={() => setStageOpen(true)} title="開場說明、怎樣算過關、過關後" className="px-2 py-1 rounded hover:bg-white/10 text-sm">
+          <button
+            type="button"
+            onClick={() => {
+              setStageTab('flow')
+              setStageOpen(true)
+            }}
+            title="開場說明、怎樣算過關、任務目標、重玩時要不要重置"
+            className="px-2 py-1 rounded hover:bg-white/10 text-sm"
+          >
             🏁 關卡設定
           </button>
           <button type="button" onClick={() => setFlagsOpen(true)} title="學生做過的事（記號）一覽，可改名" className="px-2 py-1 rounded hover:bg-white/10 text-sm">
@@ -367,7 +410,25 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           uploadMessage={uploadMessage}
         />
 
-        {view === 'canvas' ? (
+        {view === 'stages' ? (
+          <div className="flex-1 min-w-0">
+            <StageMap
+              draft={draft}
+              stage={stage}
+              ctx={ctx}
+              actions={actions}
+              onOpenStage={(id) => {
+                actions.selectStage(id)
+                setView('canvas')
+              }}
+              onEditSettings={(id) => {
+                actions.selectStage(id)
+                setStageTab('flow')
+                setStageOpen(true)
+              }}
+            />
+          </div>
+        ) : view === 'canvas' ? (
           <div ref={areaRef} className="flex-1 min-w-0 overflow-auto bg-slate-300 flex" onMouseDown={(e) => e.target === e.currentTarget && actions.selectObject(null)}>
             <div className="m-auto p-6">
               {scene ? (
@@ -416,7 +477,8 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
         <StageDialog
           stage={stage}
           ctx={ctx}
-          completionPlaces={completionSources(draft)}
+          completionPlaces={completionSources(draft, stage.stageId)}
+          initialTab={stageTab}
           onTitle={actions.setStageTitle}
           onUpdateStage={actions.updateStage}
           onClose={() => setStageOpen(false)}
