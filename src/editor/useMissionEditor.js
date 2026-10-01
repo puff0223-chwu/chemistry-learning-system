@@ -248,6 +248,9 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
       commit(next, { important: true })
     },
     setGraphPos: (id, pos) => commit(mapScene(draftRef.current, id, (sc) => ({ ...sc, graphPos: pos })), { key: `graph-${id}` }),
+    // Moves every scene in one go (the "自動整理" button): positions = { sceneId: { x, y } }.
+    setGraphPositions: (positions) =>
+      commit(mapStage(draftRef.current, (st) => ({ ...st, scenes: st.scenes.map((sc) => (positions[sc.sceneId] ? { ...sc, graphPos: positions[sc.sceneId] } : sc)) })), { important: true }),
 
     addObject: (type, extra = {}) => {
       if (!sceneId) return null

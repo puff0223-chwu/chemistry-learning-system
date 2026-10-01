@@ -21,19 +21,36 @@ const EXIT_POSITIONS = {
 
 const hasText = (html) => !!html && html.replace(/<[^>]*>/g, '').trim().length > 0
 
-// Fills the screen behind the 16:9 scene, so wider or taller screens show an extension of the scene instead of black bars:
-// a blurred, dimmed copy of the current background picture (or its plain colour).
+// Extends the scene past its 16:9 frame so wider or taller screens do not show bars. Rendered INSIDE the frame's box
+// and positioned outside it:
+//  - a picture background gets mirrored copies on each side. A mirror shows exactly the same pixels at the seam, so
+//    the join is invisible; a soft shadow grows away from the seam so the extension reads as "outside the scene";
+//  - a plain colour needs nothing: the screen itself takes that colour (see `screenColor`).
+// The copies tuck 2px under the frame: the frame's size is fractional, and without the overlap a hair-thin gap shows.
+const OVERLAP = 'calc(100% - 2px)'
+
 function Backdrop({ background, assets }) {
   const asset = background?.type === 'image' ? assets[background.assetId] : null
-  if (asset) {
-    return (
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <img src={assetUrl(asset.storage_path)} alt="" draggable={false} className="w-full h-full object-cover" style={{ filter: 'blur(28px) brightness(0.55)', transform: 'scale(1.15)' }} />
-      </div>
-    )
-  }
-  const color = background?.type === 'color' ? background.color : '#1e293b'
-  return <div className="absolute inset-0 pointer-events-none" style={{ background: color, filter: 'brightness(0.75)' }} />
+  if (!asset) return null
+  const src = assetUrl(asset.storage_path)
+  const mirror = (key, place, flip) => (
+    <img key={key} src={src} alt="" draggable={false} className="absolute object-cover pointer-events-none select-none" style={{ width: '100%', height: '100%', transform: flip, ...place }} />
+  )
+  const shade = (key, place, toward) => (
+    <div key={key} className="absolute pointer-events-none" style={{ width: '100%', height: '100%', background: `linear-gradient(to ${toward}, rgba(0,0,0,0), rgba(0,0,0,0.6))`, ...place }} />
+  )
+  return (
+    <>
+      {mirror('l', { right: OVERLAP, top: 0 }, 'scaleX(-1)')}
+      {mirror('r', { left: OVERLAP, top: 0 }, 'scaleX(-1)')}
+      {mirror('t', { left: 0, bottom: OVERLAP }, 'scaleY(-1)')}
+      {mirror('b', { left: 0, top: OVERLAP }, 'scaleY(-1)')}
+      {shade('sl', { right: OVERLAP, top: 0 }, 'left')}
+      {shade('sr', { left: OVERLAP, top: 0 }, 'right')}
+      {shade('st', { left: 0, bottom: OVERLAP }, 'top')}
+      {shade('sb', { left: 0, top: OVERLAP }, 'bottom')}
+    </>
+  )
 }
 
 function ExitButton({ direction, onClick }) {
@@ -200,14 +217,20 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
     )
   }
 
+  // The scene's background decides what lies beyond its frame: a plain colour fills the whole screen with that colour,
+  // a picture is mirrored outwards (see Backdrop).
+  const sceneBackground = engine.background(scene)
+  const screenColor = sceneBackground?.type === 'color' ? sceneBackground.color : '#000'
+
   const seconds = engine.elapsedSeconds()
   const sceneProps = { assets, interactive: true, isVisible: engine.isVisible, isSolved: (id) => engine.lockState(id).solved, onObjectClick: (o) => !blocked && engine.clickObject(o) }
 
   return (
-    <div className="fixed inset-0 bg-black overflow-hidden select-none z-40" style={{ touchAction: 'manipulation' }}>
-      <Backdrop background={engine.background(scene)} assets={assets} />
+    <div className="fixed inset-0 overflow-hidden select-none z-40" style={{ touchAction: 'manipulation', background: screenColor }}>
       <div ref={boxRef} className="absolute inset-0 flex items-center justify-center">
-        <div className="relative overflow-hidden" style={{ width: CANVAS_W * scale, height: CANVAS_H * scale }}>
+        <div className="relative" style={{ width: CANVAS_W * scale, height: CANVAS_H * scale }}>
+          <Backdrop background={sceneBackground} assets={assets} />
+          <div className="absolute inset-0 overflow-hidden">
           {leavingScene && (
             <div key={`out-${leaving.seq}`} className={`absolute inset-0 pointer-events-none tr-out-${leaving.kind}`}>
               <div style={{ transform: `scale(${scale})`, transformOrigin: '0 0' }}>
@@ -225,10 +248,11 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
               />
             </div>
           </div>
-          {/* Exit buttons sit on the edges of the scene itself (not the screen), so they stay with the picture on any screen shape. */}
-          {!blocked && DIRECTIONS.filter((d) => scene.exits[d.key] && engine.scenes.has(scene.exits[d.key])).map((d) => (
-            <ExitButton key={d.key} direction={d.key} onClick={() => engine.tryExit(d.key)} />
-          ))}
+            {/* Exit buttons sit on the edges of the scene itself (not the screen), so they stay with the picture on any screen shape. */}
+            {!blocked && DIRECTIONS.filter((d) => scene.exits[d.key] && engine.scenes.has(scene.exits[d.key])).map((d) => (
+              <ExitButton key={d.key} direction={d.key} onClick={() => engine.tryExit(d.key)} />
+            ))}
+          </div>
         </div>
       </div>
 

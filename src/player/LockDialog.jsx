@@ -19,19 +19,32 @@ const shuffle = (list) => {
 const bigInput = 'w-full border-2 border-slate-300 focus:border-cyan outline-none rounded-xl px-4 py-3 text-xl'
 
 // A text and/or picture card, used by choices, matching, ordering and sorting.
-function Item({ item, assets, children, selected, onClick, className = '', disabled }) {
+// `marker` (a round or square tick box) sits BESIDE the text, never on top of it, so short answers stay readable.
+function Item({ item, assets, children, marker, selected, onClick, className = '', disabled }) {
   const asset = item.assetId ? assets[item.assetId] : null
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`relative text-left rounded-xl border-2 px-4 py-3 text-lg transition-colors ${selected ? 'border-cyan bg-cyan/10' : 'border-slate-300 bg-white hover:border-cyan/60'} ${className}`}
+      className={`relative flex items-center gap-3 text-left rounded-xl border-2 px-4 py-3 text-lg text-navy transition-colors ${selected ? 'border-cyan bg-cyan/10' : 'border-slate-300 bg-white hover:border-cyan/60'} ${className}`}
     >
-      {asset && <img src={assetUrl(asset.storage_path)} alt={item.text || ''} draggable={false} className="max-h-32 mx-auto mb-1 rounded object-contain" />}
-      {item.text && <span className="block">{item.text}</span>}
+      {marker}
+      <span className="min-w-0 flex-1">
+        {asset && <img src={assetUrl(asset.storage_path)} alt={item.text || ''} draggable={false} className="max-h-32 mx-auto mb-1 rounded object-contain" />}
+        {item.text && <span className="block break-words">{item.text}</span>}
+      </span>
       {children}
     </button>
+  )
+}
+
+// The little circle (pick one) or box (pick several) in front of an option.
+function TickBox({ on, square }) {
+  return (
+    <span className={`shrink-0 w-6 h-6 border-2 flex items-center justify-center text-sm font-bold ${square ? 'rounded-md' : 'rounded-full'} ${on ? 'border-cyan bg-cyan text-white' : 'border-slate-400 bg-white text-transparent'}`}>
+      {square ? '✓' : on ? <span className="w-2.5 h-2.5 rounded-full bg-white" /> : null}
+    </span>
   )
 }
 
@@ -68,9 +81,7 @@ function ChoiceAnswer({ view, value, onChange, assets, multi }) {
       {view.options
         .filter((o) => o.text || o.assetId)
         .map((o) => (
-          <Item key={o.id} item={o} assets={assets} selected={isOn(o.id)} onClick={() => toggle(o.id)} className="flex items-center gap-3">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xl">{multi ? (isOn(o.id) ? '☑️' : '⬜') : isOn(o.id) ? '🔘' : '⚪'}</span>
-          </Item>
+          <Item key={o.id} item={o} assets={assets} selected={isOn(o.id)} onClick={() => toggle(o.id)} marker={<TickBox on={isOn(o.id)} square={multi} />} />
         ))}
     </div>
   )

@@ -6,6 +6,7 @@ import GameEngine from '../player/GameEngine.js'
 import Player from '../player/Player.jsx'
 import FlagManager from './FlagManager.jsx'
 import IconPicker from './IconPicker.jsx'
+import { autoLayout } from './graphLayout.js'
 import { iconName } from './icons.js'
 import LeftPanel from './LeftPanel.jsx'
 import RightPanel from './RightPanel.jsx'
@@ -400,6 +401,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
               onConnectExit={actions.setExit}
               onClearExit={(from, dir) => actions.setExit(from, dir, null)}
               onMoveScene={actions.setGraphPos}
+              onAutoLayout={() => actions.setGraphPositions(autoLayout(stage.scenes, stage.startSceneId))}
               onAddScene={actions.addScene}
             />
           </div>
