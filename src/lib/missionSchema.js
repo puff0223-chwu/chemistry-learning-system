@@ -59,6 +59,8 @@ export function createStage(title = '第一關') {
     completeWhen: null,
     onComplete: [],
     resetOnRetry: false,
+    join: 'all', // how several incoming connections unlock this stage: 'all' | 'any'
+    graphPos: { x: 0, y: 0 }, // editor-only: where the stage sits on the stage map
   }
 }
 
@@ -95,9 +97,12 @@ export function normalizeDraft(raw) {
   const data = { ...base, ...(raw && typeof raw === 'object' ? raw : {}) }
   data.settings = { ...base.settings, ...(data.settings ?? {}) }
   data.stages = Array.isArray(data.stages) && data.stages.length > 0 ? data.stages : [createStage()]
-  data.stages = data.stages.map((stage) => ({
+  data.stageLinks = Array.isArray(data.stageLinks) ? data.stageLinks : []
+  data.stages = data.stages.map((stage, si) => ({
     ...createStage(stage.title),
+    graphPos: { x: si * 300, y: 0 },
     ...stage,
+    objectives: stage.objectives ?? [],
     scenes: (stage.scenes ?? []).map((scene, i) => ({
       ...createScene(scene.name ?? `場景 ${i + 1}`, { x: (i % 4) * 260, y: Math.floor(i / 4) * 200 }),
       ...scene,
@@ -106,11 +111,13 @@ export function normalizeDraft(raw) {
       objects: (scene.objects ?? []).map((o) => ({ visible: true, locked: false, opacity: 1, rotation: 0, ...(o.type === 'lock' ? lockDefaults() : {}), ...o })),
     })),
   }))
-  const first = data.stages[0]
-  if (first.scenes.length === 0) first.scenes = [createScene('場景 1')]
-  if (!first.startSceneId || !first.scenes.some((s) => s.sceneId === first.startSceneId)) {
-    first.startSceneId = first.scenes[0]?.sceneId ?? null
+  for (const stage of data.stages) {
+    if (stage.scenes.length === 0) stage.scenes = [createScene('場景 1')]
+    if (!stage.startSceneId || !stage.scenes.some((s) => s.sceneId === stage.startSceneId)) stage.startSceneId = stage.scenes[0]?.sceneId ?? null
   }
+  // connections that point at a stage that no longer exists are dropped
+  const ids = new Set(data.stages.map((s) => s.stageId))
+  data.stageLinks = data.stageLinks.filter((l) => ids.has(l.from) && ids.has(l.to) && l.from !== l.to)
   return data
 }
 

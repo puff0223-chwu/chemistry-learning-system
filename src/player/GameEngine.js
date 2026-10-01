@@ -1,35 +1,49 @@
 import { checkAnswer, getExplanation, pickWrongFeedback, summarizeInput } from '../lib/lockLogic.js'
-import { DEFERRED_ACTIONS, evalCondition, isBranch, isEmptyCondition } from '../lib/missionEvents.js'
+import { DEFERRED_ACTIONS, evalCondition, isBranch, isEmptyCondition, walkActions } from '../lib/missionEvents.js'
 
 const MAX_CHAIN_DEPTH = 24 // guards against scenes whose "on enter" events send the student around in circles
 const MAX_DELAY_MS = 60000
 
-const freshState = (sceneId) => ({
-  sceneId,
+const freshState = () => ({
+  stageId: null, // the stage being played (null = standing at the stage map)
+  sceneId: null,
   flags: {},
   items: [],
   notebook: [],
   objectivesDone: [],
+  objectiveHints: {}, // objectiveId -> how many hints were shown
   visibility: {}, // objectId -> true/false, set by reveal_object / hide_object
   locks: {}, // lockId -> { wrong, hints, gaveUp, solved, afterGiveUp }
   backgrounds: {}, // sceneId -> background, set by swap_background
+  stagesDone: {}, // stageId -> true
+  unlocked: {}, // stageId -> true (once unlocked, a stage stays unlocked)
+  introduced: {}, // stageId -> true once its opening text was shown
+  lastScene: {}, // stageId -> the scene the student was last in
   elapsedMs: 0,
-  stageDone: false,
   missionDone: false,
 })
 
-// Runs one mission stage: holds the game state (flags, bag, current scene...) and executes the
-// unified event actions of spec-v5 §7. It knows nothing about React or Supabase; the UI listens through
-// subscribe() and provides ui.message / ui.sound, the log sink and the persistence sink.
+const hasText = (html) => !!html && html.replace(/<[^>]*>/g, '').trim().length > 0
+
+// Plays a whole mission: its stages, the stage map, and inside a stage the scenes. Holds the game state (flags,
+// current stage and scene...) and executes the unified event actions of spec-v5 §7. It knows nothing about React or
+// Supabase; the UI listens through subscribe() and provides ui.message / ui.sound / ui.intro, the log sink and the
+// persistence sink. Pass { mission } (several stages) or { stage } (a single stage, handy for tests).
 export default class GameEngine {
-  constructor({ stage, ui = {}, onLog = () => {}, onPersist = () => {}, saved = null, startSceneId = null, now = () => Date.now() }) {
-    this.stage = stage
+  constructor({ mission = null, stage = null, ui = {}, onLog = () => {}, onPersist = () => {}, saved = null, startSceneId = null, now = () => Date.now() }) {
+    this.mission = mission ?? { stages: [stage], stageLinks: [], settings: {} }
+    this.stages = this.mission.stages
+    this.stagesById = new Map(this.stages.map((st) => [st.stageId, st]))
+    this.links = this.mission.stageLinks ?? []
+    this.settings = this.mission.settings ?? {}
     this.ui = ui
     this.onLog = onLog
     this.onPersist = onPersist
     this.now = now
-    this.scenes = new Map(stage.scenes.map((s) => [s.sceneId, s]))
-    this.objects = new Map(stage.scenes.flatMap((s) => s.objects.map((o) => [o.id, { scene: s, object: o }])))
+    this.scenes = new Map(this.stages.flatMap((st) => st.scenes.map((s) => [s.sceneId, s])))
+    this.stageOf = new Map(this.stages.flatMap((st) => st.scenes.map((s) => [s.sceneId, st.stageId])))
+    this.objects = new Map(this.stages.flatMap((st) => st.scenes.flatMap((s) => s.objects.map((o) => [o.id, { scene: s, object: o }]))))
+    this.objectives = new Map(this.stages.flatMap((st) => (st.objectives ?? []).map((o) => [o.objectiveId, { objective: o, stageId: st.stageId }])))
     // group id -> the objects in it (a group can be shown or hidden as one)
     this.groupMembers = new Map()
     for (const [id, { object }] of this.objects) {
@@ -39,13 +53,32 @@ export default class GameEngine {
     this.depth = 0
     this.destroyed = false
     this.resumed = !!saved
-    const first = startSceneId ?? stage.startSceneId ?? stage.scenes[0]?.sceneId ?? null
-    const base = saved && this.scenes.has(saved.sceneId) ? { ...freshState(first), ...saved } : freshState(first)
+    this.startSceneId = startSceneId
+
+    let base = freshState()
+    if (saved) {
+      base = { ...base, ...saved }
+      // progress saved before stages existed: "stageDone: true" meant the one and only stage
+      if (saved.stageDone === true) base.stagesDone = { ...base.stagesDone, [this.stages[0].stageId]: true }
+      delete base.stageDone
+      if (base.stageId && !this.stagesById.has(base.stageId)) base.stageId = null
+      if (base.sceneId && !this.scenes.has(base.sceneId)) base.sceneId = null
+    }
     // `transition` is display-only (which way the last scene change should animate) and never saved.
     this.state = { ...base, transition: null, tick: 0 }
+    this.refreshUnlocks({ silent: true })
     this.runStart = now()
     this.elapsedBase = base.elapsedMs ?? 0
+    this.stageStartedAt = now()
     this.transitionSeq = 0
+  }
+
+  get stage() {
+    return this.stagesById.get(this.state.stageId) ?? this.stages[0]
+  }
+
+  get multiStage() {
+    return this.stages.length > 1
   }
 
   // ---- React bridge ----------------------------------------------------------------------
@@ -95,7 +128,7 @@ export default class GameEngine {
   }
 
   scene() {
-    return this.scenes.get(this.state.sceneId) ?? null
+    return this.state.stageId ? (this.scenes.get(this.state.sceneId) ?? null) : null
   }
 
   isVisible = (object) => {
@@ -114,31 +147,128 @@ export default class GameEngine {
   }
 
   log(eventType, { blockId = null, payload = null } = {}) {
-    const scene = this.scene()
-    this.onLog(eventType, { stageId: this.stage.stageId, sceneId: scene?.sceneId ?? null, blockId, payload })
+    this.onLog(eventType, { stageId: this.state.stageId, sceneId: this.scene()?.sceneId ?? null, blockId, payload })
+  }
+
+  // ---- stages: the map, unlocking, entering and leaving ---------------------------------------------
+
+  // Does this stage's incoming connection let the student through right now?
+  linkActive(link) {
+    return !!this.state.stagesDone[link.from] && (isEmptyCondition(link.when) || this.check(link.when))
+  }
+
+  // A stage with no connection pointing at it is a starting stage. Otherwise its incoming connections decide:
+  // join "all" needs every one to be active, "any" needs one.
+  stageUnlockable(stage) {
+    const incoming = this.links.filter((l) => l.to === stage.stageId && this.stagesById.has(l.from))
+    if (incoming.length === 0) return true
+    return (stage.join ?? 'all') === 'any' ? incoming.some((l) => this.linkActive(l)) : incoming.every((l) => this.linkActive(l))
+  }
+
+  // Unlocks whatever has become reachable (never locks anything again). Returns the stages unlocked just now.
+  refreshUnlocks({ silent = false } = {}) {
+    const fresh = this.stages.filter((st) => !this.state.unlocked[st.stageId] && this.stageUnlockable(st))
+    if (fresh.length === 0) return []
+    const unlocked = { ...this.state.unlocked, ...Object.fromEntries(fresh.map((st) => [st.stageId, true])) }
+    if (silent) this.state = { ...this.state, unlocked }
+    else this.setState({ unlocked })
+    return fresh
+  }
+
+  // What the stage map shows: every stage with its status ('locked' | 'open' | 'done') and why it is locked.
+  stageCards() {
+    return this.stages.map((st) => {
+      const done = !!this.state.stagesDone[st.stageId]
+      const status = done ? 'done' : this.state.unlocked[st.stageId] ? 'open' : 'locked'
+      const needs = this.links.filter((l) => l.to === st.stageId && this.stagesById.has(l.from)).map((l) => this.stagesById.get(l.from).title)
+      return { stage: st, status, needs, join: st.join ?? 'all' }
+    })
+  }
+
+  async enterStage(stageId, { sceneId = null } = {}) {
+    const st = this.stagesById.get(stageId)
+    if (!st || !this.state.unlocked[stageId]) return
+    const replay = !!this.state.stagesDone[stageId]
+    if (replay && st.resetOnRetry) this.resetStage(stageId)
+    const target = sceneId ?? (replay && st.resetOnRetry ? null : this.state.lastScene[stageId]) ?? st.startSceneId ?? st.scenes[0]?.sceneId ?? null
+    if (!target) return
+    const first = !this.state.lastScene[stageId]
+    this.stageStartedAt = this.now()
+    this.setState({ stageId, sceneId: target, transition: null })
+    if (first || replay) this.log('stage_start', { payload: { title: st.title, replay } })
+    // opening text, once per stage
+    if (hasText(st.intro) && !this.state.introduced[stageId]) {
+      this.setState({ introduced: { ...this.state.introduced, [stageId]: true } })
+      await this.ui.intro?.(st)
+    }
+    await this.enterScene(target, null, { animate: false })
+    await this.checkCompletion()
+  }
+
+  leaveStage() {
+    if (!this.state.stageId) return
+    this.setState({ stageId: null, transition: null })
+  }
+
+  // Replaying a finished stage with "重置" on: puts its scenes, locks, backgrounds and the markers its events set back.
+  resetStage(stageId) {
+    const st = this.stagesById.get(stageId)
+    if (!st) return
+    const objectIds = new Set(st.scenes.flatMap((s) => s.objects.map((o) => o.id)))
+    const sceneIds = new Set(st.scenes.map((s) => s.sceneId))
+    const drop = (obj, keep) => Object.fromEntries(Object.entries(obj).filter(([k]) => keep(k)))
+    const ownFlags = new Set()
+    const collect = (list) => walkActions(list, (a) => a.action === 'set_flag' && a.flag && ownFlags.add(a.flag))
+    for (const scene of st.scenes) {
+      collect(scene.onEnter)
+      for (const o of scene.objects) {
+        collect(o.onClick)
+        collect(o.onSuccess)
+        collect(o.onGiveUp)
+      }
+    }
+    const ownObjectives = new Set((st.objectives ?? []).map((o) => o.objectiveId))
+    this.setState({
+      visibility: drop(this.state.visibility, (id) => !objectIds.has(id)),
+      locks: drop(this.state.locks, (id) => !objectIds.has(id)),
+      backgrounds: drop(this.state.backgrounds, (id) => !sceneIds.has(id)),
+      flags: drop(this.state.flags, (f) => !ownFlags.has(f)),
+      objectivesDone: this.state.objectivesDone.filter((id) => !ownObjectives.has(id)),
+      objectiveHints: drop(this.state.objectiveHints, (id) => !ownObjectives.has(id)),
+      lastScene: drop(this.state.lastScene, (id) => id !== stageId),
+    })
   }
 
   // ---- lifecycle ------------------------------------------------------------------------------
 
   async start() {
-    if (!this.resumed) this.log('mission_start')
-    const scene = this.scene()
-    if (!scene) return
-    if (!this.resumed) this.log('stage_start')
-    if (!this.resumed) await this.enterScene(scene.sceneId, null, { animate: false })
-    else this.log('scene_enter')
-    await this.checkCompletion()
+    if (this.resumed) {
+      if (this.state.stageId && this.scene()) this.log('scene_enter')
+      await this.checkCompletion()
+      return
+    }
+    await this.beginFresh()
+  }
+
+  // A fresh game: with one stage we walk straight in; with several the student starts at the map.
+  async beginFresh() {
+    this.log('mission_start')
+    const owner = this.startSceneId ? this.stageOf.get(this.startSceneId) : null
+    const starters = this.stages.filter((st) => this.state.unlocked[st.stageId])
+    if (owner) await this.enterStage(owner, { sceneId: this.startSceneId })
+    else if (!this.multiStage || starters.length === 1) await this.enterStage((starters[0] ?? this.stages[0]).stageId)
   }
 
   // Preview "reset": back to a fresh state, optionally at another scene.
   async restart(sceneId = null) {
     this.elapsedBase = 0
     this.runStart = this.now()
-    this.state = { ...freshState(sceneId ?? this.stage.startSceneId), transition: null, tick: this.state.tick }
+    this.state = { ...freshState(), transition: null, tick: this.state.tick }
+    this.refreshUnlocks({ silent: true })
+    this.startSceneId = sceneId ?? this.startSceneId
     this.listeners.forEach((l) => l())
     this.onPersist(this.serialize())
-    await this.enterScene(this.state.sceneId, null, { animate: false })
-    await this.checkCompletion()
+    await this.beginFresh()
   }
 
   setFlag(flag, on) {
@@ -180,6 +310,10 @@ export default class GameEngine {
 
   async enterScene(sceneId, kind, { animate = true } = {}) {
     if (!this.scenes.has(sceneId)) return
+    if (this.stageOf.get(sceneId) !== this.state.stageId) {
+      console.warn('[player] 不能直接走到另一關的場景，已略過（跨關卡請用關卡連線）')
+      return
+    }
     if (this.depth >= MAX_CHAIN_DEPTH) {
       console.error('[player] 場景連鎖進入次數過多，已停止（請檢查「進入場景時」的事件是否互相跳轉）')
       return
@@ -188,6 +322,7 @@ export default class GameEngine {
     this.transitionSeq += 1
     this.setState({
       sceneId,
+      lastScene: { ...this.state.lastScene, [this.state.stageId]: sceneId },
       transition: animate && from !== sceneId ? { seq: this.transitionSeq, kind: kind ?? 'fade', from } : null,
     })
     this.log('scene_enter')
@@ -259,10 +394,7 @@ export default class GameEngine {
         if (a.entryText) this.setState({ notebook: [...this.state.notebook, { category: a.category ?? '', text: a.entryText }] })
         break
       case 'complete_objective':
-        if (a.objectiveId && !this.state.objectivesDone.includes(a.objectiveId)) {
-          this.setState({ objectivesDone: [...this.state.objectivesDone, a.objectiveId] })
-          this.log('objective_done', { payload: { objectiveId: a.objectiveId } })
-        }
+        await this.markObjectiveDone(a.objectiveId ?? a.target)
         break
       case 'complete_stage':
         await this.completeStage()
@@ -360,19 +492,77 @@ export default class GameEngine {
     return explanation
   }
 
+  // ---- objectives (spec-v5 §11) ---------------------------------------------------------------------
+
+  async markObjectiveDone(id) {
+    const entry = this.objectives.get(id)
+    if (!id || !entry || this.state.objectivesDone.includes(id)) return false
+    this.setState({ objectivesDone: [...this.state.objectivesDone, id] })
+    this.log('objective_done', { payload: { objectiveId: id, text: entry.objective.text } })
+    await this.runActions(entry.objective.onDone ?? [])
+    return true
+  }
+
+  // Objectives of the current stage as the objective bar shows them. A hidden ("彩蛋") one only appears once done.
+  currentObjectives() {
+    const done = this.state.objectivesDone
+    return (this.stage.objectives ?? [])
+      .filter((o) => (o.hidden ? done.includes(o.objectiveId) : this.check(o.visibleWhen)))
+      .map((o) => {
+        const isDone = done.includes(o.objectiveId)
+        const hints = (o.hints ?? []).filter((h) => h && h.trim())
+        return { id: o.objectiveId, text: o.text, done: isDone, hints, hintsShown: Math.min(this.state.objectiveHints[o.objectiveId] ?? 0, hints.length) }
+      })
+  }
+
+  requestObjectiveHint(id) {
+    const o = this.currentObjectives().find((x) => x.id === id)
+    if (!o || o.done || o.hintsShown >= o.hints.length) return
+    this.setState({ objectiveHints: { ...this.state.objectiveHints, [id]: o.hintsShown + 1 } })
+    this.log('hint_shown', { blockId: id, payload: { objectiveId: id, level: o.hintsShown + 1, auto: false } })
+  }
+
+  // ---- finishing -------------------------------------------------------------------------------------
+
+  // Called after anything that may have changed the state: finishes objectives whose condition now holds, then
+  // the stage itself if its "自動過關" condition holds.
   async checkCompletion() {
+    if (!this.state.stageId) return
+    for (let round = 0; round < 10; round++) {
+      let changed = false
+      for (const o of this.stage.objectives ?? []) {
+        if (!this.state.objectivesDone.includes(o.objectiveId) && !isEmptyCondition(o.doneWhen) && this.check(o.doneWhen)) {
+          changed = (await this.markObjectiveDone(o.objectiveId)) || changed
+        }
+      }
+      if (!changed) break
+    }
     const cond = this.stage.completeWhen
-    if (this.state.stageDone || isEmptyCondition(cond) || !this.check(cond)) return
+    if (this.state.stagesDone[this.state.stageId] || isEmptyCondition(cond) || !this.check(cond)) return
     await this.completeStage()
   }
 
+  // The mission is finished when something was completed and every stage that is unlocked has been completed.
+  allUnlockedDone() {
+    const open = this.stages.filter((st) => this.state.unlocked[st.stageId])
+    return open.length > 0 && open.every((st) => this.state.stagesDone[st.stageId])
+  }
+
   async completeStage() {
-    if (this.state.stageDone) return
-    this.setState({ stageDone: true })
-    this.log('stage_complete', { payload: { seconds: this.elapsedSeconds() } })
+    const id = this.state.stageId
+    if (!id || this.state.stagesDone[id]) return
+    this.setState({ stagesDone: { ...this.state.stagesDone, [id]: true } })
+    this.log('stage_complete', { payload: { seconds: Math.round((this.now() - this.stageStartedAt) / 1000), title: this.stage.title } })
     await this.runActions(this.stage.onComplete ?? [])
-    // One stage for now; the stage map (later phase) decides what comes next.
-    this.setState({ missionDone: true })
-    this.log('mission_complete', { payload: { seconds: this.elapsedSeconds() } })
+    const fresh = this.refreshUnlocks()
+    if (this.allUnlockedDone()) {
+      this.setState({ missionDone: true })
+      this.log('mission_complete', { payload: { seconds: this.elapsedSeconds() } })
+      return
+    }
+    // more to play: straight into the next stage if there is exactly one (and the teacher allows it), else the map
+    const playable = this.stages.filter((st) => this.state.unlocked[st.stageId] && !this.state.stagesDone[st.stageId])
+    if (this.settings.autoNextStage && playable.length === 1 && fresh.some((st) => st.stageId === playable[0].stageId)) await this.enterStage(playable[0].stageId)
+    else this.leaveStage()
   }
 }
