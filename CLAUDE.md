@@ -49,4 +49,11 @@
 5. 回報後停下，等老師確認再合併 main、再進下一階段。
 
 ## 目前階段
-Phase 1～2.5 已完成。**下一步：規格書第十八節的第 1 階段「系統更名與地基」**。詳見 `docs/PROGRESS.md`。
+舊系統 Phase 1～2.5 已完成。規格書第 1 階段「系統更名與地基」已開發完成（分支 `phase-1-foundation`），**等老師執行 `supabase/phase1-missions.sql` 並確認後才合併 main**；合併後下一步是第 2 階段「素材庫」。詳見 `docs/PROGRESS.md`。
+
+
+
+## 新系統重點檔案
+- `supabase/phase1-missions.sql`：任務系統資料表、RLS、檢視表 `published_missions`、bucket `mission-assets`。
+- `src/lib/missions.js`：任務 CRUD、空任務 JSON 骨架；學生端只能讀 `published_missions` 檢視表，不可直接讀 `missions` 表。
+- 網址：學生 `/missions`；後台 `/admin/missions`、`/admin/mission-categories`；舊版 `/task`、`/battle` 不變。

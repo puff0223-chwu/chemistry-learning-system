@@ -3,6 +3,46 @@
 > 最新的放最上面。每個階段結束必須更新：完成內容、資料表變更、已知問題、下一步。
 > 規格書：`docs/spec-v5.md`。禁止寫入密碼、API 金鑰、token。
 
+## 2026-10-01 第 1 階段「系統更名與地基」（分支 `phase-1-foundation`，待老師確認後合併）
+
+### 完成內容
+- 更名「科學任務偵探所」：首頁、網頁標題、後台側邊欄標題、README。首頁兩個入口改為「🗺️ 任務」（→ `/missions`）與「⚔️ 雙人對戰 PK」；右上角「管理登入」。
+- 後台側邊欄依規格書第三節重整（網址全部不變）：🧩 任務工坊（任務列表、分類管理）／⚔️ 對戰題庫（主題、題目、標籤）／📊 學習資料（任務關卡資料〔舊版〕、對戰紀錄）／⚙️ 系統設定（主題外觀、帳號設定）。編輯器、素材庫、發布管理、任務紀錄等頁面由後續階段加入。
+- 新頁面：`/admin/missions`（任務列表：新增、編輯名稱／分類、複製、刪除、依分類篩選；顯示草稿／已發布／已封存）、`/admin/mission-categories`（新增、改名、排序、刪除）、`/missions`（學生任務列表，分類篩選，只讀得到已發布且開放的任務）。
+- 新增 `src/lib/missions.js`（任務 CRUD、空任務 JSON 骨架）。
+- 舊版 TaskPlay 保留：`/task` 仍可用，入口移到 `/missions` 頁面底部的小連結（規格書：待新系統上線後由老師決定是否隱藏）。
+- 通過 `npm run lint`（0 error）、`npm run build`。
+
+### 資料表變更（`supabase/phase1-missions.sql`，需老師到 SQL Editor 執行，可重複執行）
+- 新增：`mission_categories`（預設化學任務／鑑識案件／密室逃脫）、`missions`、`mission_assets`、`mission_logs`（`unique(session_id, seq)`）、`mission_submissions`。
+- 新增檢視表 `published_missions`：學生（anon）只能讀到 `status='published' AND is_open=true` 的任務與其 `published_data`；`missions` 表對 anon 完全不授權（看不到草稿）。
+- `student_sessions`：新增 `mission_id`、`mission_version`；`mode` 檢查條件放寬為 `task／battle／mission`（既有資料不變）。
+- RLS：logs、submissions、sessions 為 anon INSERT only；老師（authenticated）全權限。
+- Storage：bucket `mission-assets`（public 讀取，登入老師可上傳／改／刪）。
+- 沒有刪除或改名任何既有資料表或欄位。
+
+### 已知問題／注意
+- **SQL 執行前，`/missions` 會顯示「載入失敗：找不到 published_missions」**；首頁「任務」入口指向該頁。所以必須先執行 SQL，再合併到 main。
+- Phase 1 沒有「發布」功能（發布流程與健檢在第 5 階段），所以學生列表目前一定是空的；卡片尚無點擊動作（播放器在第 4 階段）。
+- 任務狀態在 Phase 1 只能顯示，不能切換；`is_open` 的開關在第 12 階段發布管理。
+- 刪除任務時尚未處理素材（第 2 階段素材庫處理）。素材紀錄的 `mission_id` 在任務刪除時設為空（變成共用素材）。
+- 後台登入後仍導向 `/admin/topics`（沿用舊行為），之後可考慮改成任務列表。
+- 登入後的後台頁面本次無法在無登入狀態下自動化測試，需老師實測（見下方步驟）。
+
+### 老師測試步驟
+1. 到 Supabase → SQL Editor，貼上 `supabase/phase1-missions.sql` 全部內容並執行；看到 Success 即可。再到 Storage 確認有 `mission-assets` bucket（若沒有，手動建立 public bucket 後重跑 SQL）。
+2. 打開 Vercel 預覽網址（推送分支後 Vercel 產生）。首頁應顯示「科學任務偵探所」，點「任務」進入空列表（顯示「目前沒有開放的任務」）。
+3. 點右上角「管理登入」登入後台，確認側邊欄分四組；舊功能（主題、題目、標籤、學習資料、外觀、帳號）逐一點開都正常。
+4. 任務工坊 → 任務列表 → 新增任務（名稱＋分類）→ 編輯名稱 → 複製（名稱會加「（副本）」）→ 刪除。
+5. 任務工坊 → 分類管理：新增、改名、上下移動、刪除分類；回任務列表確認被刪分類的任務變成「未分類」。
+6. 試玩一場舊版「任務闖關」與「雙人對戰」，確認可以正常作答、學習資料仍寫入。
+
+### 下一步
+- 老師確認後：合併 `phase-1-foundation` 到 main。
+- 第 2 階段「素材庫」：上傳、瀏覽器端壓縮 WebP、用量統計、刪除保護。
+
+---
+
 ## 2026-10-01 交接準備（科學任務偵探所 v5）
 
 ### 完成內容

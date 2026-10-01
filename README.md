@@ -1,6 +1,6 @@
-# 化學偵探學習系統
+# 科學任務偵探所（原化學偵探學習系統）
 
-React + Vite + Tailwind CSS + Supabase 打造的化學學習網頁應用，含任務闖關模式、雙人 PK 對戰模式與老師後台。
+React + Vite + Tailwind CSS + Supabase 打造的化學學習網頁應用，含任務系統（開發中）、舊版任務闖關、雙人 PK 對戰模式與老師後台。
 
 ## 本機開發
 
@@ -28,6 +28,7 @@ npm run dev
 4. 執行 [`supabase/editor-upgrade.sql`](supabase/editor-upgrade.sql)：題目難度、內容標籤（`tags`）與外觀設定（`settings`）。
 5. 到 **Storage** 建立兩個 **public** bucket：`question-images`（題目圖片）、`site-backgrounds`（背景圖），再執行 [`supabase/storage.sql`](supabase/storage.sql) 開放登入的老師上傳。
 6. （可選）執行 [`supabase/seed.sql`](supabase/seed.sql) 插入示範資料，或直接透過老師後台新增。
+7. 執行 [`supabase/phase1-missions.sql`](supabase/phase1-missions.sql)（科學任務偵探所第 1 階段）：建立 `missions`、`mission_categories`、`mission_assets`、`mission_logs`、`mission_submissions`、檢視表 `published_missions`、`student_sessions` 新欄位與 Storage bucket `mission-assets`。可重複執行，不影響既有資料。
 
 ### 為什麼老師後台用 Supabase Auth 登入，而不是規格書寫的「純前端密碼比對＋secret key」？
 

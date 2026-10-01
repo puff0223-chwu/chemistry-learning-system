@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Home from './pages/Home.jsx'
+import MissionSelect from './pages/MissionSelect.jsx'
 import TaskSelect from './pages/TaskSelect.jsx'
 import TaskPlay from './pages/TaskPlay.jsx'
 import BattleSelect from './pages/BattleSelect.jsx'
@@ -10,6 +11,8 @@ import AdminResetPassword from './pages/AdminResetPassword.jsx'
 import RequireAdmin from './components/RequireAdmin.jsx'
 
 // Admin pages (rich-text editor, Excel export, ...) are only downloaded when a teacher opens them.
+const AdminMissions = lazy(() => import('./pages/AdminMissions.jsx'))
+const AdminMissionCategories = lazy(() => import('./pages/AdminMissionCategories.jsx'))
 const AdminTopics = lazy(() => import('./pages/AdminTopics.jsx'))
 const AdminQuestions = lazy(() => import('./pages/AdminQuestions.jsx'))
 const AdminTags = lazy(() => import('./pages/AdminTags.jsx'))
@@ -27,12 +30,15 @@ function App() {
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-500">載入中...</div>}>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/missions" element={<MissionSelect />} />
         <Route path="/task" element={<TaskSelect />} />
         <Route path="/task/:topicId" element={<TaskPlay />} />
         <Route path="/battle" element={<BattleSelect />} />
         <Route path="/battle/:topicId" element={<BattlePlay />} />
         <Route path="/admin" element={<AdminLogin />} />
         <Route path="/admin/reset-password" element={<AdminResetPassword />} />
+        <Route path="/admin/missions" element={admin(<AdminMissions />)} />
+        <Route path="/admin/mission-categories" element={admin(<AdminMissionCategories />)} />
         <Route path="/admin/topics" element={admin(<AdminTopics />)} />
         <Route path="/admin/questions" element={admin(<AdminQuestions />)} />
         <Route path="/admin/tags" element={admin(<AdminTags />)} />
