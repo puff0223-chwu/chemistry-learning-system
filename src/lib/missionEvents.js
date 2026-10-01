@@ -16,6 +16,7 @@ export const ACTION_META = [
   { type: 'clear_flag', icon: '🧽', label: '忘記一件事', desc: '把某個進度記號擦掉', category: 'memory' },
   { type: 'if', icon: '🔀', label: '如果…就…', desc: '依情況做不同的事', category: 'flow' },
   { type: 'play_sound', icon: '🔊', label: '播放音效', desc: '播放素材庫裡的音訊', category: 'flow' },
+  { type: 'open_lock', icon: '🔐', label: '出一道題目', desc: '讓學生回答某個答案鎖（題目）', category: 'lock' },
   { type: 'delay', icon: '⏱️', label: '等一下', desc: '停幾秒再做下一件事', category: 'flow' },
   { type: 'complete_stage', icon: '🏁', label: '讓學生過關', desc: '學生完成這一關', category: 'goal' },
 ]
@@ -23,7 +24,7 @@ export const ACTION_TYPES = ACTION_META.map(({ type, label }) => ({ type, label 
 export const actionMeta = (type) => ACTION_META.find((m) => m.type === type)
 
 // Actions the engine cannot run yet (their blocks arrive later); they are skipped with a console note.
-export const DEFERRED_ACTIONS = ['set_state', 'open_lock', 'open_workbench']
+export const DEFERRED_ACTIONS = ['set_state', 'open_workbench']
 
 export const TRANSITIONS = [
   { value: '', label: '淡入（預設）' },
@@ -51,6 +52,8 @@ export function newAction(type) {
       return { action: type, sceneId: null, assetId: null }
     case 'play_sound':
       return { action: type, assetId: null }
+    case 'open_lock':
+      return { action: type, target: null }
     case 'delay':
       return { action: type, ms: 1000 }
     case 'if':
@@ -140,6 +143,10 @@ export function listSources(data) {
     for (const o of scene.objects) {
       addActions(`場景「${scene.name}」的「${o.name}」被點擊時`, o.onClick)
       addCondition(`場景「${scene.name}」的「${o.name}」的出現條件`, o.showWhen)
+      if (o.type === 'lock') {
+        addActions(`場景「${scene.name}」的答案鎖「${o.name}」答對時`, o.onSuccess)
+        addActions(`場景「${scene.name}」的答案鎖「${o.name}」按「我真的不會」時`, o.onGiveUp)
+      }
     }
   }
   return out
@@ -245,6 +252,8 @@ export function describeAction(a, ctx) {
       return `換${quote(scene(a.sceneId))}的背景`
     case 'play_sound':
       return '播放音效'
+    case 'open_lock':
+      return `出題「${object(a.target)}」`
     case 'delay':
       return `等 ${(a.ms ?? 0) / 1000} 秒`
     case 'complete_stage':

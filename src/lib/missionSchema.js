@@ -1,3 +1,4 @@
+import { lockDefaults } from './lockLogic.js'
 import { emptyMissionData } from './missions.js'
 
 // Logical canvas size (spec-v5 §6.2). Scenes are always laid out in 1600x900 and scaled to the screen.
@@ -21,6 +22,7 @@ export const OBJECT_TYPE_LABELS = {
   icon: '圖示',
   text: '文字',
   hotspot: '隱形點擊區',
+  lock: '答案鎖',
 }
 
 export function genId(prefix) {
@@ -41,6 +43,7 @@ export function createScene(name, graphPos = { x: 0, y: 0 }) {
     exits: emptyExits(),
     exitConditions: {},
     objects: [],
+    groups: [], // [{ id, name }]: objects point at one with groupId, so a group can be moved or shown as one
     graphPos, // editor-only: where the scene sits in the scene graph
   }
 }
@@ -80,6 +83,7 @@ export function createObject(type, extra = {}) {
     icon: { icon: '🔑', w: 120, h: 120 },
     text: { html: '<p>點兩下右側面板編輯文字</p>', fontSize: 32, color: '#ffffff', align: 'left', background: '', w: 500, h: 160 },
     hotspot: { w: 200, h: 200 },
+    lock: { ...lockDefaults(), name: '答案鎖', w: 120, h: 120 },
   }
   return { ...base, ...byType[type], ...extra }
 }
@@ -98,7 +102,8 @@ export function normalizeDraft(raw) {
       ...createScene(scene.name ?? `場景 ${i + 1}`, { x: (i % 4) * 260, y: Math.floor(i / 4) * 200 }),
       ...scene,
       exits: { ...emptyExits(), ...(scene.exits ?? {}) },
-      objects: (scene.objects ?? []).map((o) => ({ visible: true, locked: false, opacity: 1, rotation: 0, ...o })),
+      groups: scene.groups ?? [],
+      objects: (scene.objects ?? []).map((o) => ({ visible: true, locked: false, opacity: 1, rotation: 0, ...(o.type === 'lock' ? lockDefaults() : {}), ...o })),
     })),
   }))
   const first = data.stages[0]

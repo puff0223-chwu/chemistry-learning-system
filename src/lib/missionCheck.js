@@ -1,3 +1,4 @@
+import { validateLock } from './lockLogic.js'
 import { collectEventSources, isEmptyCondition, listSources, walkActions } from './missionEvents.js'
 
 // Pre-publish health check (subset of spec-v5 §17.5; the answer-lock checks arrive with the locks).
@@ -14,14 +15,13 @@ export function checkMission(data, existingAssetIds) {
   if (stage.scenes.length === 0) errors.push('任務裡沒有任何場景。')
   if (!stage.startSceneId || !sceneById.has(stage.startSceneId)) errors.push('還沒有設定起始場景。')
 
-  // Where does each event list live? Used to name the culprit in messages.
-  const lists = []
-  const add = (where, list) => list?.length && lists.push({ where, list })
-  add('關卡「過關後」', stage.onComplete)
-  for (const scene of stage.scenes) {
-    add(`場景「${scene.name}」進入時`, scene.onEnter)
-    for (const o of scene.objects) add(`場景「${scene.name}」的「${o.name}」被點擊時`, o.onClick)
-  }
+  // Every event list in the mission, with a label that names the culprit in messages.
+  const lists = listSources(data)
+    .filter((s) => s.actions.length)
+    .map((s) => ({ where: s.label, list: s.actions }))
+  const lockById = new Map(stage.scenes.flatMap((s) => s.objects.filter((o) => o.type === 'lock').map((o) => [o.id, o])))
+  // a group can be the target of "show / hide"
+  const groupIds = new Set(stage.scenes.flatMap((s) => (s.groups ?? []).map((g) => g.id)))
 
   const flagsSet = new Set()
   const gotoTargets = new Set()
@@ -39,7 +39,11 @@ export function checkMission(data, existingAssetIds) {
         case 'reveal_object':
         case 'hide_object':
           if (!a.target) errors.push(`${where}：「${a.action === 'reveal_object' ? '顯示' : '隱藏'}物件」還沒選物件。`)
-          else if (!objectById.has(a.target)) errors.push(`${where}：「${a.action === 'reveal_object' ? '顯示' : '隱藏'}物件」指向不存在（或已刪除）的物件。`)
+          else if (!objectById.has(a.target) && !groupIds.has(a.target)) errors.push(`${where}：「${a.action === 'reveal_object' ? '顯示' : '隱藏'}物件」指向不存在（或已刪除）的物件。`)
+          break
+        case 'open_lock':
+          if (!a.target) errors.push(`${where}：「出一道題目」還沒選是哪一題。`)
+          else if (!lockById.has(a.target)) errors.push(`${where}：「出一道題目」指向不存在（或已刪除）的答案鎖。`)
           break
         case 'set_flag':
           if (!a.flag) errors.push(`${where}：「設定旗標」沒有填旗標名稱。`)
@@ -67,6 +71,12 @@ export function checkMission(data, existingAssetIds) {
   }
 
   for (const scene of stage.scenes) {
+    for (const o of scene.objects) {
+      if (o.type !== 'lock') continue
+      const result = validateLock(o)
+      for (const t of result.errors) errors.push(`場景「${scene.name}」的答案鎖「${o.name}」：${t}`)
+      for (const t of result.warnings) warnings.push(`場景「${scene.name}」的答案鎖「${o.name}」：${t}`)
+    }
     for (const [dir, target] of Object.entries(scene.exits)) {
       if (target && !sceneById.has(target)) errors.push(`場景「${scene.name}」的「${dir}」出口指向不存在的場景。`)
     }

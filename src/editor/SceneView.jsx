@@ -11,7 +11,7 @@ function Missing({ label }) {
   )
 }
 
-function ObjectBody({ object, assets, editor, lite, interactive }) {
+function ObjectBody({ object, assets, editor, lite, interactive, isSolved }) {
   const asset = object.assetId ? assets[object.assetId] : null
   switch (object.type) {
     case 'image':
@@ -59,6 +59,19 @@ function ObjectBody({ object, assets, editor, lite, interactive }) {
           style={{ fontSize: object.fontSize, color: object.color, textAlign: object.align, background: object.background || 'transparent', padding: 8, lineHeight: 1.4 }}
         />
       )
+    case 'lock': {
+      const solved = !!isSolved?.(object.id)
+      if (object.appearance === 'invisible') {
+        return editor ? (
+          <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-amber-300 bg-amber-300/20 text-amber-100 text-xl">🔒 答案鎖（隱形）</div>
+        ) : null
+      }
+      return (
+        <div className="w-full h-full flex items-center justify-center leading-none select-none drop-shadow-lg" style={{ fontSize: Math.min(object.w, object.h) * 0.8 }}>
+          {solved ? '🔓' : object.icon}
+        </div>
+      )
+    }
     case 'hotspot':
       return editor ? (
         <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-cyan-300 bg-cyan-300/20 text-cyan-100 text-xl">隱形點擊區</div>
@@ -86,7 +99,7 @@ function BrokenObject() {
 //   background             -> overrides the scene background (swap_background)
 //   onObjectClick(object)  -> called for objects that have click events
 //   onObjectError(object, error) -> a broken object only shows a notice, the rest of the scene keeps working
-export default function SceneView({ scene, assets, editor = false, lite = false, interactive = false, isVisible, background, onObjectClick, onObjectError }) {
+export default function SceneView({ scene, assets, editor = false, lite = false, interactive = false, isVisible, isSolved, background, onObjectClick, onObjectError }) {
   return (
     <div className="relative overflow-hidden" style={{ width: CANVAS_W, height: CANVAS_H }}>
       <SceneBackground background={background ?? scene.background} assets={assets} />
@@ -94,7 +107,7 @@ export default function SceneView({ scene, assets, editor = false, lite = false,
         const visibleNow = isVisible ? isVisible(o) : o.visible
         const hidden = !visibleNow
         if (hidden && !editor) return null
-        const clickable = interactive && o.onClick?.length > 0
+        const clickable = interactive && (o.onClick?.length > 0 || o.type === 'lock')
         const youtube = interactive && o.type === 'video' && parseYouTubeId(o.youtubeUrl)
         return (
           <div
@@ -119,7 +132,7 @@ export default function SceneView({ scene, assets, editor = false, lite = false,
               </span>
             )}
             <ErrorBoundary fallback={<BrokenObject />} onError={(err) => onObjectError?.(o, err)}>
-              <ObjectBody object={o} assets={assets} editor={editor} lite={lite} interactive={interactive} />
+              <ObjectBody object={o} assets={assets} editor={editor} lite={lite} interactive={interactive} isSolved={isSolved} />
             </ErrorBoundary>
           </div>
         )

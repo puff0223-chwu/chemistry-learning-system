@@ -1,3 +1,4 @@
+import { checkAnswer, getExplanation, pickWrongFeedback, summarizeInput } from '../lib/lockLogic.js'
 import { DEFERRED_ACTIONS, evalCondition, isBranch, isEmptyCondition } from '../lib/missionEvents.js'
 
 const MAX_CHAIN_DEPTH = 24 // guards against scenes whose "on enter" events send the student around in circles
@@ -10,6 +11,7 @@ const freshState = (sceneId) => ({
   notebook: [],
   objectivesDone: [],
   visibility: {}, // objectId -> true/false, set by reveal_object / hide_object
+  locks: {}, // lockId -> { wrong, hints, gaveUp, solved, afterGiveUp }
   backgrounds: {}, // sceneId -> background, set by swap_background
   elapsedMs: 0,
   stageDone: false,
@@ -28,6 +30,11 @@ export default class GameEngine {
     this.now = now
     this.scenes = new Map(stage.scenes.map((s) => [s.sceneId, s]))
     this.objects = new Map(stage.scenes.flatMap((s) => s.objects.map((o) => [o.id, { scene: s, object: o }])))
+    // group id -> the objects in it (a group can be shown or hidden as one)
+    this.groupMembers = new Map()
+    for (const [id, { object }] of this.objects) {
+      if (object.groupId) this.groupMembers.set(object.groupId, [...(this.groupMembers.get(object.groupId) ?? []), id])
+    }
     this.listeners = new Set()
     this.depth = 0
     this.destroyed = false
@@ -159,6 +166,11 @@ export default class GameEngine {
 
   async clickObject(object) {
     if (this.state.missionDone) return
+    if (object.type === 'lock') {
+      await this.openLock(object.id)
+      await this.checkCompletion()
+      return
+    }
     if (object.logClick) this.log('object_click', { blockId: object.id })
     await this.runActions(object.onClick ?? [])
     await this.checkCompletion()
@@ -208,8 +220,15 @@ export default class GameEngine {
         if (a.sceneId) await this.enterScene(a.sceneId, a.transition || 'fade')
         break
       case 'reveal_object':
-      case 'hide_object':
-        if (a.target) this.setState({ visibility: { ...this.state.visibility, [a.target]: a.action === 'reveal_object' } })
+      case 'hide_object': {
+        if (!a.target) break
+        const shown = a.action === 'reveal_object'
+        const ids = this.groupMembers.get(a.target) ?? [a.target] // a group target means every object in it
+        this.setState({ visibility: { ...this.state.visibility, ...Object.fromEntries(ids.map((id) => [id, shown])) } })
+        break
+      }
+      case 'open_lock':
+        await this.openLock(a.target)
         break
       case 'set_flag':
         if (a.flag) this.setState({ flags: { ...this.state.flags, [a.flag]: true } })
@@ -255,6 +274,90 @@ export default class GameEngine {
         if (DEFERRED_ACTIONS.includes(a.action)) console.warn(`[player] 「${a.action}」要等後續階段才支援，已略過`)
         else console.warn(`[player] 不認識的事件：${a.action}`)
     }
+  }
+
+  // ---- answer locks (spec-v5 §9) ---------------------------------------------------------------------
+
+  lockObject(id) {
+    const entry = this.objects.get(id)
+    return entry?.object.type === 'lock' ? entry.object : null
+  }
+
+  lockState(id) {
+    return this.state.locks[id] ?? { wrong: 0, hints: 0, gaveUp: false, solved: false, afterGiveUp: false }
+  }
+
+  setLockState(id, patch) {
+    this.setState({ locks: { ...this.state.locks, [id]: { ...this.lockState(id), ...patch } } })
+  }
+
+  lockHints(lock) {
+    return (lock.hints ?? []).filter((h) => h && h.trim())
+  }
+
+  // The dialog asks what it may offer: more hints? the "我真的不會" button?
+  lockOptions(id) {
+    const lock = this.lockObject(id)
+    const st = this.lockState(id)
+    const total = this.lockHints(lock).length
+    return {
+      canHint: !st.solved && !st.gaveUp && st.hints < total && (lock.hintMode === 'onRequest' || st.wrong > 0),
+      canGiveUp: !st.solved && !st.gaveUp && !!lock.giveUp?.enabled && st.wrong >= (lock.giveUp.afterAttempts ?? 3),
+      hintsTotal: total,
+    }
+  }
+
+  // Shows the lock's dialog and waits until the student closes it (solved or walked away).
+  async openLock(id) {
+    if (!id || !this.lockObject(id)) return
+    await this.ui.lock?.(id)
+  }
+
+  async submitLock(id, input) {
+    const lock = this.lockObject(id)
+    const st = this.lockState(id)
+    if (!lock) return { correct: false, right: 0, total: 1 }
+    if (st.solved) return { correct: true, right: 1, total: 1, already: true }
+    const result = await checkAnswer(lock, input)
+    this.log('lock_attempt', { blockId: id, payload: { answer: summarizeInput(lock, input), correct: result.correct, attempt: st.wrong + 1 } })
+
+    if (result.correct) {
+      this.setLockState(id, { solved: true, afterGiveUp: st.gaveUp })
+      this.log('lock_solved', { blockId: id, payload: { afterGiveUp: st.gaveUp, attempts: st.wrong + 1, hints: st.hints } })
+      this.ui.closeLock?.(id)
+      await this.runActions(lock.onSuccess ?? [])
+      return result
+    }
+
+    const wrong = st.wrong + 1
+    const patch = { wrong }
+    // "hint after each wrong answer": reveal the next layer automatically (not after giving up)
+    const total = this.lockHints(lock).length
+    if (!st.gaveUp && lock.hintMode !== 'onRequest' && st.hints < Math.min(wrong, total)) {
+      patch.hints = Math.min(wrong, total)
+      this.log('hint_shown', { blockId: id, payload: { level: patch.hints, auto: true } })
+    }
+    this.setLockState(id, patch)
+    return { ...result, feedback: pickWrongFeedback(lock, input) }
+  }
+
+  requestHint(id) {
+    const st = this.lockState(id)
+    if (!this.lockOptions(id).canHint) return
+    this.setLockState(id, { hints: st.hints + 1 })
+    this.log('hint_shown', { blockId: id, payload: { level: st.hints + 1, auto: false } })
+  }
+
+  // "我真的不會": reveal the explanation and run the give-up events, but do NOT pass the lock. The student must
+  // still answer it correctly themselves (spec §9.3).
+  async giveUp(id) {
+    const lock = this.lockObject(id)
+    if (!lock || !this.lockOptions(id).canGiveUp) return null
+    this.setLockState(id, { gaveUp: true })
+    this.log('give_up', { blockId: id, payload: { attempts: this.lockState(id).wrong } })
+    const explanation = await getExplanation(lock)
+    await this.runActions(lock.onGiveUp ?? [])
+    return explanation
   }
 
   async checkCompletion() {

@@ -174,6 +174,7 @@ const STRIPE = {
   memory: 'border-l-purple-500',
   flow: 'border-l-teal-500',
   goal: 'border-l-amber-500',
+  lock: 'border-l-rose-500',
 }
 
 function SceneSelect({ scenes, value, onChange }) {
@@ -189,7 +190,7 @@ function SceneSelect({ scenes, value, onChange }) {
   )
 }
 
-function ObjectSelect({ objects, value, onChange, selfId, selfName }) {
+function ObjectSelect({ objects, groups: wholeGroups = [], value, onChange, selfId, selfName }) {
   const groups = Object.entries(
     objects.reduce((acc, o) => {
       ;(acc[o.sceneName] ??= []).push(o)
@@ -200,6 +201,15 @@ function ObjectSelect({ objects, value, onChange, selfId, selfName }) {
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} className={required(value)}>
       <option value="">（選一個物件…）</option>
       {selfId && <option value={selfId}>⭐ 這個物件自己（{selfName}）</option>}
+      {wholeGroups.length > 0 && (
+        <optgroup label="🗂 整個群組（一次處理全部）">
+          {wholeGroups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}（場景：{g.sceneName}）
+            </option>
+          ))}
+        </optgroup>
+      )}
       {groups.map(([sceneName, list]) => (
         <optgroup key={sceneName} label={`場景：${sceneName}`}>
           {list.map((o) => (
@@ -257,7 +267,14 @@ function ActionParams({ action, onChange, ctx, depth }) {
       )
     case 'reveal_object':
     case 'hide_object':
-      return <ObjectSelect objects={ctx.objects} value={action.target} onChange={(v) => set({ target: v })} selfId={ctx.selfId} selfName={ctx.selfName} />
+      return <ObjectSelect objects={ctx.objects} groups={ctx.groups} value={action.target} onChange={(v) => set({ target: v })} selfId={ctx.selfId} selfName={ctx.selfName} />
+    case 'open_lock':
+      return (
+        <>
+          <ObjectSelect objects={ctx.objects.filter((o) => o.type === 'lock')} value={action.target} onChange={(v) => set({ target: v })} />
+          {!ctx.objects.some((o) => o.type === 'lock') && <p className="text-xs text-amber-700">還沒有任何答案鎖。請先用左邊「加入物件」的「🔐 答案鎖」做一題。</p>}
+        </>
+      )
     case 'set_flag':
     case 'clear_flag':
       return (
@@ -352,6 +369,22 @@ const RECIPES = {
       build: () => [{ if: {}, then: [{ action: 'show_message', message: '成功了！' }], else: [{ action: 'show_message', message: '好像還缺少什麼…' }] }],
     },
     { icon: '🏁', label: '點到就過關', desc: '學生完成這一關', build: () => [{ action: 'complete_stage' }] },
+  ],
+  lock: [
+    {
+      icon: '✨',
+      label: '讓寶物出現',
+      desc: '答對後，讓一個隱藏的東西現身',
+      build: () => [{ action: 'reveal_object', target: null }, { action: 'show_message', message: '答對了！' }],
+    },
+    { icon: '🚶', label: '帶他去別的場景', desc: '像是打開通往下一間的門', build: () => [{ action: 'show_message', message: '答對了，門開了！' }, { action: 'goto_scene', sceneId: null, transition: '' }] },
+    {
+      icon: '📌',
+      label: '記住「這題解開了」',
+      desc: '之後別的地方可以檢查它',
+      build: (ctx) => [{ action: 'set_flag', flag: `解開${ctx.selfName ?? '題目'}` }, { action: 'show_message', message: '答對了！' }],
+    },
+    { icon: '🏁', label: '讓學生過關', desc: '這是最後一題', build: () => [{ action: 'show_message', message: '恭喜答對！' }, { action: 'complete_stage' }] },
   ],
   scene: [
     { icon: '💬', label: '進來就說一句話', desc: '每次進入都會說', build: () => [{ action: 'show_message', message: '' }] },

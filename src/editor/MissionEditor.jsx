@@ -36,7 +36,7 @@ function statusText(status, savedAt, saveError) {
 // and the save / upload functions, so it can also be exercised on its own.
 export default function MissionEditor({ missionId, title, initialDraft, initialAssets, save, upload, check, publish, onBack }) {
   const editor = useMissionEditor({ initialDraft, save, storageKey: `mission-draft-${missionId}` })
-  const { draft, scene, object, sceneId, status, savedAt, saveError, canUndo, canRedo, actions } = editor
+  const { draft, scene, object, objectIds, sceneId, status, savedAt, saveError, canUndo, canRedo, actions } = editor
   const stage = getStage(draft)
 
   const [assets, setAssets] = useState(initialAssets)
@@ -72,11 +72,11 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   // Keyboard shortcuts always use the freshest actions.
   const latest = useRef(null)
   useEffect(() => {
-    latest.current = { actions, object, view, previewing: !!preview }
+    latest.current = { actions, object, objectIds, scene, view, previewing: !!preview }
   })
   useEffect(() => {
     function onKeyDown(e) {
-      const { actions: a, object: o, view: v, previewing } = latest.current
+      const { actions: a, objectIds: ids, scene: sc, view: v, previewing } = latest.current
       if (previewing) return // keys belong to the game while test-playing
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.key.toLowerCase() === 's') {
@@ -92,22 +92,30 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
       } else if (mod && e.key.toLowerCase() === 'y') {
         e.preventDefault()
         a.redo()
-      } else if (v !== 'canvas' || !o) {
-        // everything below needs a selected object on the canvas
+      } else if (v !== 'canvas' || ids.length === 0) {
+        // everything below needs a selection on the canvas
       } else if (mod && e.key.toLowerCase() === 'd') {
         e.preventDefault()
-        a.duplicateObject(o.id)
+        a.duplicateObjects(ids)
+      } else if (mod && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        a.groupSelected()
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault()
-        a.deleteObject(o.id)
+        a.deleteObjects(ids)
       } else if (e.key === 'Escape') {
         a.selectObject(null)
-      } else if (e.key.startsWith('Arrow') && !o.locked) {
+      } else if (e.key.startsWith('Arrow')) {
+        const movable = (sc?.objects ?? []).filter((x) => ids.includes(x.id) && !x.locked)
+        if (movable.length === 0) return
         e.preventDefault()
         const step = e.shiftKey ? 10 : 1
         const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
         const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
-        a.updateObject(o.id, { x: o.x + dx, y: o.y + dy }, { key: `nudge-${o.id}` })
+        a.updateObjects(
+          movable.map((x) => ({ id: x.id, patch: { x: x.x + dx, y: x.y + dy } })),
+          { key: 'nudge-selection' },
+        )
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -182,7 +190,8 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   const ctx = useMemo(
     () => ({
       scenes: stage.scenes,
-      objects: stage.scenes.flatMap((sc) => sc.objects.map((o) => ({ id: o.id, name: o.name, sceneName: sc.name }))),
+      objects: stage.scenes.flatMap((sc) => sc.objects.map((o) => ({ id: o.id, name: o.name, type: o.type, sceneName: sc.name }))),
+      groups: stage.scenes.flatMap((sc) => (sc.groups ?? []).map((g) => ({ id: g.id, name: g.name, sceneName: sc.name }))),
       flags: collectFlags(draft),
       assets,
     }),
@@ -209,6 +218,15 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   function startPreview() {
     if (!scene) return
     setPreview(new GameEngine({ stage, startSceneId: scene.sceneId }))
+  }
+
+  // "試答看看": test-play from the lock's own scene and open just that question.
+  function previewLock(lockId) {
+    const home = stage.scenes.find((sc) => sc.objects.some((o) => o.id === lockId))
+    if (!home) return
+    const engine = new GameEngine({ stage, startSceneId: home.sceneId })
+    engine.autoOpenLock = lockId
+    setPreview(engine)
   }
 
   function closePreview() {
@@ -245,7 +263,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
 
   return (
     <div className="h-screen flex flex-col bg-paper text-navy overflow-hidden">
-      <header className="bg-navy text-white px-4 py-2 flex items-center gap-3 shrink-0">
+      <header className="bg-navy text-white px-4 py-2 flex items-center gap-x-3 gap-y-1 flex-wrap shrink-0 [&_button]:whitespace-nowrap">
         <button type="button" onClick={handleBack} className="text-sm text-[#c9d6e6] hover:text-white whitespace-nowrap">
           ← 回任務列表
         </button>
@@ -291,12 +309,17 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
         <button type="button" onClick={startPreview} disabled={!scene} className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 rounded-lg px-3 py-1 text-sm font-bold" title="從目前這個場景開始試玩">
           ▶ 試玩
         </button>
-        <button type="button" onClick={exportJson} className="text-sm text-[#c9d6e6] hover:text-white">
-          匯出備份
-        </button>
-        <button type="button" onClick={() => importInput.current?.click()} className="text-sm text-[#c9d6e6] hover:text-white">
-          匯入備份
-        </button>
+        <details className="relative text-sm" onMouseLeave={(e) => e.currentTarget.removeAttribute('open')}>
+          <summary className="cursor-pointer list-none px-2 py-1 rounded hover:bg-white/10 text-[#c9d6e6]">⋯ 更多</summary>
+          <div className="absolute right-0 top-full mt-1 z-30 bg-white text-navy rounded-lg shadow-lg p-1 w-44 flex flex-col">
+            <button type="button" onClick={exportJson} className="text-left px-3 py-2 rounded hover:bg-slate-100">
+              ⬇ 匯出備份檔
+            </button>
+            <button type="button" onClick={() => importInput.current?.click()} className="text-left px-3 py-2 rounded hover:bg-slate-100">
+              ⬆ 匯入備份檔
+            </button>
+          </div>
+        </details>
         <input
           ref={importInput}
           type="file"
@@ -350,10 +373,12 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
                 <SceneCanvas
                   scene={scene}
                   assets={assetMap}
-                  selectedId={object?.id ?? null}
+                  selectedIds={objectIds}
                   zoom={zoom}
                   onSelect={actions.selectObject}
+                  onSelectMany={actions.selectObjects}
                   onChange={actions.updateObject}
+                  onChangeMany={actions.updateObjects}
                   onDropAsset={(id, pos) => assetMap[id] && placeAsset(assetMap[id], pos)}
                 />
               ) : (
@@ -380,7 +405,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           </div>
         )}
 
-        {scene && <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} onPickIcon={setIconPickerFor} />}
+        {scene && <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} objectIds={objectIds} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} onPickIcon={setIconPickerFor} onPreviewLock={previewLock} />}
       </div>
 
       {iconPickerFor && <IconPicker current={scene?.objects.find((o) => o.id === iconPickerFor)?.icon} onPick={pickIcon} onClose={() => setIconPickerFor(null)} />}

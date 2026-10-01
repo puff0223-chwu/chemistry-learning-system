@@ -175,6 +175,10 @@ body {
   max-height: max(14vw, 90px);
 }
 
+/* wrong answer: a quick sideways shake of the answer card */
+@keyframes lock-shake { 0%, 100% { transform: none; } 20% { transform: translateX(-10px); } 40% { transform: translateX(9px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(4px); } }
+.lock-shake { animation: lock-shake 0.4s ease; }
+
 /* ---- mission player: scene change animations (spec-v5 §6.1) ----
    left/right = horizontal slide, up/down = vertical slide, forward/backward = fade + slight zoom. */
 @keyframes tr-in-from-left { from { transform: translateX(-100%); } to { transform: none; } }

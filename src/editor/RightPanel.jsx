@@ -2,7 +2,10 @@ import { useState } from 'react'
 import RichTextEditor from '../components/RichTextEditor.jsx'
 import { DIRECTIONS, OBJECT_TYPE_LABELS, parseYouTubeId } from '../lib/missionSchema.js'
 import AssetPicker from './AssetPicker.jsx'
-import { ConditionEditor, EventEditor } from './EventEditor.jsx'
+import { EventEditor } from './EventEditor.jsx'
+import LayersPanel, { SelectionPanel, interactionBadges } from './LayersPanel.jsx'
+import LockProperties from './LockEditor.jsx'
+import VisibilityBlock from './VisibilityBlock.jsx'
 
 const inputClass = 'w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-sm'
 
@@ -46,51 +49,6 @@ function Tabs({ tabs, value, onChange }) {
         </button>
       ))}
     </div>
-  )
-}
-
-// What an object can do, as little icons: ⚡ reacts to clicks, ⏳ not always visible.
-export const interactionBadges = (o) => `${o.onClick?.length ? '⚡' : ''}${o.showWhen || o.visible === false ? '⏳' : ''}`
-
-// ---------------------------------------------------------------- layers
-
-function LayersPanel({ objects, selectedId, onSelect, onUpdate, onMove, onDelete, onDuplicate }) {
-  const reversed = [...objects].reverse() // top-most first, like every layer panel
-  return (
-    <section className="border-b border-slate-200 p-3 flex flex-col gap-2 max-h-60 min-h-[110px]">
-      <h2 className="font-bold text-sm">圖層（上面的蓋住下面的）</h2>
-      {objects.length === 0 && <p className="text-xs text-slate-400">這個場景還沒有物件。</p>}
-      <ul className="overflow-y-auto flex flex-col gap-1">
-        {reversed.map((o) => (
-          <li key={o.id} className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm ${o.id === selectedId ? 'bg-cyan/15 ring-1 ring-cyan' : 'hover:bg-slate-100'}`}>
-            <button type="button" title={o.visible ? '一開始會顯示，按一下改成「一開始看不到」' : '一開始看不到，按一下改成顯示'} onClick={() => onUpdate(o.id, { visible: !o.visible })} className="w-6">
-              {o.visible ? '👁️' : '🚫'}
-            </button>
-            <button type="button" title={o.locked ? '已鎖定（畫布上點不到）' : '鎖定，避免誤拖'} onClick={() => onUpdate(o.id, { locked: !o.locked })} className="w-6">
-              {o.locked ? '🔒' : '🔓'}
-            </button>
-            <button type="button" onClick={() => onSelect(o.id)} className="flex-1 min-w-0 text-left truncate">
-              {o.name}
-              <span className="text-[11px] text-slate-400"> {OBJECT_TYPE_LABELS[o.type]}</span>
-              <span className="text-[11px]" title="⚡ 點擊有事件　⏳ 有出現條件或一開始隱藏">
-                {' '}
-                {interactionBadges(o)}
-              </span>
-            </button>
-            {o.id === selectedId && (
-              <span className="flex gap-0.5 text-xs">
-                <button type="button" title="移到最上面" onClick={() => onMove(o.id, 'top')} className="px-1 hover:bg-slate-200 rounded">⤒</button>
-                <button type="button" title="上移一層" onClick={() => onMove(o.id, 'up')} className="px-1 hover:bg-slate-200 rounded">↑</button>
-                <button type="button" title="下移一層" onClick={() => onMove(o.id, 'down')} className="px-1 hover:bg-slate-200 rounded">↓</button>
-                <button type="button" title="移到最下面" onClick={() => onMove(o.id, 'bottom')} className="px-1 hover:bg-slate-200 rounded">⤓</button>
-                <button type="button" title="複製（Ctrl+D）" onClick={() => onDuplicate(o.id)} className="px-1 hover:bg-slate-200 rounded">⧉</button>
-                <button type="button" title="刪除（Delete）" onClick={() => onDelete(o.id)} className="px-1 hover:bg-red-100 text-red-600 rounded">🗑</button>
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }
 
@@ -206,46 +164,12 @@ function LookTab({ object, assets, assetMap, onUpdate, onPickIcon }) {
 
 // ---------------------------------------------------------------- object: 互動 tab
 
-const VISIBILITY = [
-  { mode: 'always', icon: '👁', title: '一直看得到', desc: '遊戲一開始就在畫面上。' },
-  { mode: 'hidden', icon: '🙈', title: '一開始看不到', desc: '要靠某個動作「讓東西出現」才會現身，例如打開抽屜後露出線索。' },
-  { mode: 'when', icon: '⏳', title: '等某件事發生才看得到', desc: '條件一成立就自動出現，例如拿到鑰匙後，門才出現。' },
-]
-
 function InteractTab({ object, ctx, onUpdate }) {
-  const mode = object.showWhen ? 'when' : object.visible === false ? 'hidden' : 'always'
   const objectCtx = { ...ctx, selfId: object.id, selfName: object.name }
-
-  function chooseMode(next) {
-    if (next === 'always') onUpdate(object.id, { visible: true, showWhen: null }, { important: true })
-    if (next === 'hidden') onUpdate(object.id, { visible: false, showWhen: null }, { important: true })
-    if (next === 'when') onUpdate(object.id, { visible: true, showWhen: object.showWhen ?? {} }, { important: true })
-  }
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="flex flex-col gap-2">
-        <h3 className="font-bold text-sm">👀 學生什麼時候看得到它？</h3>
-        {VISIBILITY.map((v) => (
-          <label key={v.mode} className={`flex gap-2 rounded-lg border p-2 cursor-pointer ${mode === v.mode ? 'border-cyan bg-cyan/5' : 'border-slate-200 hover:bg-slate-50'}`}>
-            <input type="radio" name={`vis-${object.id}`} checked={mode === v.mode} onChange={() => chooseMode(v.mode)} className="mt-1" />
-            <span className="text-sm">
-              <b>
-                {v.icon} {v.title}
-              </b>
-              <span className="block text-xs text-slate-500">{v.desc}</span>
-            </span>
-          </label>
-        ))}
-        {mode === 'when' && (
-          <ConditionEditor
-            value={object.showWhen}
-            onChange={(v) => onUpdate(object.id, { showWhen: v ?? {} }, { key: `showwhen-${object.id}` })}
-            ctx={ctx}
-            emptyHint="還沒設條件，目前會一直看得到。請按下面「＋ 加一個條件」。"
-          />
-        )}
-      </section>
+      <VisibilityBlock object={object} ctx={ctx} onUpdate={onUpdate} />
 
       <section className="flex flex-col gap-2 border-t border-slate-200 pt-3">
         <h3 className="font-bold text-sm">🖱️ 學生點它的時候，會發生什麼事？</h3>
@@ -259,10 +183,36 @@ function InteractTab({ object, ctx, onUpdate }) {
   )
 }
 
-function ObjectProperties({ object, assets, assetMap, ctx, onUpdate, onPickIcon }) {
+// A member of a group: say so, and let the teacher take it out or select the whole group.
+function GroupNote({ group, object, onUpdate, onSelectGroup }) {
+  if (!group) return null
+  return (
+    <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-lg px-2 py-1.5 text-sm">
+      <span className="flex-1 min-w-0 truncate">🗂 屬於群組「{group.name}」</span>
+      <button type="button" onClick={onSelectGroup} className="text-violet-800 underline whitespace-nowrap">選整組</button>
+      <button type="button" onClick={() => onUpdate(object.id, { groupId: undefined }, { important: true })} className="text-violet-800 underline whitespace-nowrap">移出群組</button>
+    </div>
+  )
+}
+
+function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPickIcon, onPreviewLock, onSelectGroup }) {
   const [tab, setTab] = useState(object.type === 'hotspot' ? 'interact' : 'look')
+  if (object.type === 'lock') {
+    return (
+      <LockProperties
+        lock={object}
+        assets={assets}
+        ctx={ctx}
+        TabBar={Tabs}
+        onChange={(patch, opts) => onUpdate(object.id, patch, opts)}
+        onPickIcon={() => onPickIcon(object.id)}
+        onPreview={() => onPreviewLock(object.id)}
+      />
+    )
+  }
   return (
     <div className="flex flex-col gap-3">
+      <GroupNote group={group} object={object} onUpdate={onUpdate} onSelectGroup={onSelectGroup} />
       <Field label={`名稱（只有你看得到，方便辨認）　${OBJECT_TYPE_LABELS[object.type]}`}>
         <input value={object.name} onChange={(e) => onUpdate(object.id, { name: e.target.value }, { key: `prop-${object.id}-name` })} className={inputClass} />
       </Field>
@@ -425,21 +375,16 @@ function SceneProperties({ scene, scenes, assets, assetMap, ctx, isStart, onUpda
   )
 }
 
-export default function RightPanel({ scene, scenes, stage, object, assets, assetMap, ctx, actions, onPickIcon }) {
+export default function RightPanel({ scene, scenes, stage, object, objectIds, assets, assetMap, ctx, actions, onPickIcon, onPreviewLock }) {
+  const group = object?.groupId ? (scene.groups ?? []).find((g) => g.id === object.groupId) : null
   return (
     <aside className="w-[22rem] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
-      <LayersPanel
-        objects={scene.objects}
-        selectedId={object?.id ?? null}
-        onSelect={actions.selectObject}
-        onUpdate={actions.updateObject}
-        onMove={actions.moveLayer}
-        onDelete={actions.deleteObject}
-        onDuplicate={actions.duplicateObject}
-      />
+      <LayersPanel scene={scene} selectedIds={objectIds} actions={actions} />
       <div className="flex-1 overflow-y-auto p-3">
-        {object ? (
-          <ObjectProperties key={object.id} object={object} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} onPickIcon={onPickIcon} />
+        {objectIds.length > 1 ? (
+          <SelectionPanel scene={scene} selectedIds={objectIds} actions={actions} />
+        ) : object ? (
+          <ObjectProperties key={object.id} object={object} group={group} onSelectGroup={() => actions.selectObject(object.id)} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} onPickIcon={onPickIcon} onPreviewLock={onPreviewLock} />
         ) : (
           <SceneProperties
             key={scene.sceneId}

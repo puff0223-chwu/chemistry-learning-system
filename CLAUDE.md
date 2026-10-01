@@ -46,7 +46,7 @@
 - 學習紀錄（logs）寫入一律 fire-and-forget，失敗只 `console.error`，不可影響學生操作。
 - 學生端顯示 TipTap HTML 一律經 `renderRich`（DOMPurify），不可直接 `dangerouslySetInnerHTML`。
 - 需老師在外部後台手動做的事（SQL、Redirect URL、環境變數、Storage policy）要明確列出，完成前不可宣稱已上線可用。
-- 檢查指令：`npm run lint`、`npm run build`（無自動化測試，以預覽＋build 通過為準）。Node 需用完整路徑 `C:\Program Files\nodejs\node.exe`（PATH 未刷新時）。
+- 檢查指令：`npm run lint`、`npm run build`、`npm test`（`tests/` 是遊戲引擎、事件條件、答案鎖、群組的邏輯測試，純 node 不需瀏覽器；改這些邏輯前後都要跑，新功能請補測試；畫面部分以預覽實際操作為準）。Node 需用完整路徑 `C:\Program Files\nodejs\node.exe`（PATH 未刷新時）。
 - 任何紀錄檔、文件、commit 訊息不得寫入密碼、API 金鑰、token。
 
 ## 每階段結束必做事項
@@ -57,7 +57,7 @@
 5. 回報後停下，等老師確認再合併 main、再進下一階段。
 
 ## 目前階段
-舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。第 3 階段「畫布編輯器核心」已完成並上線（老師實測通過）。第 4 階段「播放器核心＋事件系統」已完成並上線（老師實測通過）。**下一步：第 5 階段「答案鎖」**，**圖層群組（老師指定）排在第 5 階段一起做、必須在第 7 階段前完成**。
+舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。第 3 階段「畫布編輯器核心」已完成並上線（老師實測通過）。第 4 階段「播放器核心＋事件系統」已完成並上線（老師實測通過）。第 5 階段「答案鎖＋圖層群組」已開發完成（分支 `phase-5-locks`，**不需要新的 SQL**），**等老師實測（含 iPad 手指答題）後才合併 main**；圖層群組已完成，滿足「第 7 階段前必須完成」。合併後下一步：第 6 階段「關卡系統＋任務目標＋學習紀錄後台」。
 **老師指定待辦：圖層群組（規格書 6.3）必須在第 7 階段開工前完成**，每階段開工盤點時請確認此項狀態。詳見 `docs/PROGRESS.md`。
 
 
@@ -68,6 +68,8 @@
 - `src/lib/assets.js`：素材上傳（WebP 壓縮、雜湊檔名）、用量、使用中檢查、刪除。**任務 JSON 引用素材一律用 `mission_assets.id` 當 `assetId`**（刪除保護靠它比對）。`supabase/phase2-assets.sql`：`name` 欄位與 `mission_assets_in_use` 函式。
 - 編輯器：`src/pages/AdminMissionEditor.jsx`（讀寫 Supabase）→ `src/editor/MissionEditor.jsx`（全螢幕外殼，不碰 Supabase，由 props 傳入草稿、素材、存檔函式）；狀態／復原／自動存檔在 `useMissionEditor.js`；`SceneView.jsx` 以 DOM 繪製場景（播放器要共用它），`SceneCanvas.jsx` 疊 Konva 透明層做互動；`SceneGraph.jsx` 是 react-flow 場景關聯圖。任務 JSON 的結構與預設值在 `src/lib/missionSchema.js`（物件陣列順序＝圖層順序，最後＝最上層）。
 - 播放器：`src/pages/MissionPlay.jsx`（學生流程：讀已發布版本→學生資料→預載→續玩詢問）→ `src/player/Player.jsx`（畫面、轉場、訊息、過關）← `src/player/GameEngine.js`（狀態與事件執行器，與 React／Supabase 無關，可用 node 直接測）。事件／條件的規則在 `src/lib/missionEvents.js`（編輯器表單與播放器共用）。新增動作類型時：先在 `missionEvents.js` 的 `ACTION_TYPES`／`newAction` 登記、`GameEngine.runAction` 實作、`EventEditor.jsx` 加表單、`missionCheck.js` 補健檢。
+- 答案鎖：判斷與加密在 `src/lib/lockLogic.js`（純函式，可用 node 測；每個題型的判斷同時支援明文與加密後的鎖，`protectLock`／`protectMission` 在發布時呼叫，見 `missions.js` 的 `publishMission`）；引擎的提示／放棄／解開在 `GameEngine`（`submitLock`、`requestHint`、`giveUp`）；學生答題畫面 `src/player/LockDialog.jsx`（全部點選操作）；老師出題介面 `src/editor/LockEditor.jsx`（四個分頁）。新增題型要同時改：`lockLogic.js`（`ANSWER_TYPES`、`newAnswer`、`plainTokens`/`checkAnswer`、`protectLock`、`validateLock`、`lockView`）、`LockDialog.jsx`、`LockEditor.jsx`，並補測試（明文與加密結果必須一致）。`answerDrafts`（切換題型暫存的舊答案）發布時一定要移除。
+- 群組與多選：規則在 `src/editor/groupOps.js`（純函式）；物件以 `groupId` 指向場景的 `groups`；引擎的 `groupMembers` 讓「讓東西出現／消失」能以群組為目標。
 - 事件編輯器 UX（老師實測後改版，請沿用）：用「進度記號」而不是「旗標」；記號只能從清單選或新增（`EventEditor.jsx` 的 `FlagPicker`），總覽與改名在 `FlagManager.jsx`；條件是句子式列表並自動顯示白話解釋（`ConditionEditor`、`describeCondition`）；步驟是依種類上色的卡片並提供常用範例（`RECIPES`）；物件互動在「外觀／互動」分頁；關卡的開場／過關方式／過關後集中在 `StageDialog.jsx`；圖示庫在 `icons.js`（可中文搜尋）。新增動作時，`ACTION_META`（含圖示、說明、分類顏色）也要補。
 - 紀錄：`src/lib/missionLogQueue.js`（IndexedDB 離線佇列；`createMissionRecorder` 產生遞增流水號）。**流水號與進度存檔必須一起存**（見 MissionPlay 的 `persist`），否則續玩會重複使用流水號而被資料庫丟掉紀錄。
 - 發布：編輯器「📢 發布」→ `missionCheck.js` 健檢 → `publishMission()`；是否對學生開放由任務列表的「開放給學生」控制。

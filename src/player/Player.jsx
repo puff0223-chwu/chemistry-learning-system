@@ -5,6 +5,7 @@ import SceneView from '../editor/SceneView.jsx'
 import { assetUrl } from '../lib/assets.js'
 import { collectFlags, usesElapsedTime } from '../lib/missionEvents.js'
 import { CANVAS_H, CANVAS_W, DIRECTIONS } from '../lib/missionSchema.js'
+import LockDialog from './LockDialog.jsx'
 
 const TRANSITION_MS = 450
 
@@ -105,6 +106,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   const mutedRef = useRef(false)
   const [phase, setPhase] = useState(() => (!engine.resumed && hasText(stage.intro) ? 'intro' : 'run'))
   const [confirmExit, setConfirmExit] = useState(false)
+  const [lockOpen, setLockOpen] = useState(null) // { id, resolve } while a lock's dialog is showing
   const [debugOpen, setDebugOpen] = useState(mode === 'preview')
 
   const flags = useMemo(() => (mode === 'preview' ? collectFlags({ stages: [stage] }) : []), [mode, stage])
@@ -131,6 +133,12 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   useEffect(() => {
     engine.ui = {
       message: (text) => new Promise((resolve) => setMessages((list) => [...list, { text, resolve }])),
+      lock: (id) => new Promise((resolve) => setLockOpen({ id, resolve })),
+      closeLock: () =>
+        setLockOpen((cur) => {
+          cur?.resolve()
+          return null
+        }),
       sound: (assetId) => {
         const asset = assets[assetId]
         if (!asset || mutedRef.current) return
@@ -143,7 +151,8 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   useEffect(() => {
     if (phase !== 'run' || engine.startedOnce) return
     engine.startedOnce = true
-    engine.start()
+    // the editor's "試答看看" opens one question as soon as the game has started
+    engine.start().then(() => engine.autoOpenLock && engine.openLock(engine.autoOpenLock))
   }, [phase, engine])
 
   // Animate scene changes: keep the old scene underneath while the new one slides/fades in.
@@ -178,7 +187,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
     return () => window.removeEventListener('keydown', onKey)
   }, [messages.length, dismissMessage])
 
-  const blocked = messages.length > 0 || phase === 'intro' || state.missionDone
+  const blocked = messages.length > 0 || phase === 'intro' || state.missionDone || !!lockOpen
 
   if (!scene) {
     return (
@@ -192,7 +201,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   }
 
   const seconds = engine.elapsedSeconds()
-  const sceneProps = { assets, interactive: true, isVisible: engine.isVisible, onObjectClick: (o) => !blocked && engine.clickObject(o) }
+  const sceneProps = { assets, interactive: true, isVisible: engine.isVisible, isSolved: (id) => engine.lockState(id).solved, onObjectClick: (o) => !blocked && engine.clickObject(o) }
 
   return (
     <div className="fixed inset-0 bg-black overflow-hidden select-none z-40" style={{ touchAction: 'manipulation' }}>
@@ -263,6 +272,21 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
             </button>
           </div>
         </div>
+      )}
+
+      {lockOpen && (
+        <LockDialog
+          engine={engine}
+          lockId={lockOpen.id}
+          assets={assets}
+          state={state}
+          onClose={() =>
+            setLockOpen((cur) => {
+              cur?.resolve()
+              return null
+            })
+          }
+        />
       )}
 
       {messages.length > 0 && (

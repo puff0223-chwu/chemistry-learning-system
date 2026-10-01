@@ -1,3 +1,4 @@
+import { protectMission } from './lockLogic.js'
 import { supabase } from './supabase.js'
 
 export const STATUS_LABELS = {
@@ -80,15 +81,16 @@ export async function deleteMission(id) {
   if (error) throw error
 }
 
-// Copies the draft over the published version and bumps the version number. is_open is left as it is,
-// so publishing never opens a mission to students by itself.
+// Copies the draft over the published version and bumps the version number. Answers are hashed and explanations
+// encrypted on the way (spec-v5 §4.4); the draft itself keeps them in the clear for editing.
+// is_open is left as it is, so publishing never opens a mission to students by itself.
 export async function publishMission(id) {
   const { data, error } = await supabase.from('missions').select('draft_data, published_version').eq('id', id).single()
   if (error) throw error
   const version = data.published_version + 1
   const { error: updateError } = await supabase
     .from('missions')
-    .update({ published_data: data.draft_data, published_version: version, status: 'published', published_at: new Date().toISOString() })
+    .update({ published_data: await protectMission(data.draft_data), published_version: version, status: 'published', published_at: new Date().toISOString() })
     .eq('id', id)
   if (updateError) throw updateError
   return version
