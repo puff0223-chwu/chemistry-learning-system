@@ -20,6 +20,21 @@ const EXIT_POSITIONS = {
 
 const hasText = (html) => !!html && html.replace(/<[^>]*>/g, '').trim().length > 0
 
+// Fills the screen behind the 16:9 scene, so wider or taller screens show an extension of the scene instead of black bars:
+// a blurred, dimmed copy of the current background picture (or its plain colour).
+function Backdrop({ background, assets }) {
+  const asset = background?.type === 'image' ? assets[background.assetId] : null
+  if (asset) {
+    return (
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <img src={assetUrl(asset.storage_path)} alt="" draggable={false} className="w-full h-full object-cover" style={{ filter: 'blur(28px) brightness(0.55)', transform: 'scale(1.15)' }} />
+      </div>
+    )
+  }
+  const color = background?.type === 'color' ? background.color : '#1e293b'
+  return <div className="absolute inset-0 pointer-events-none" style={{ background: color, filter: 'brightness(0.75)' }} />
+}
+
 function ExitButton({ direction, onClick }) {
   const d = DIRECTIONS.find((x) => x.key === direction)
   const pill = direction === 'forward' || direction === 'backward'
@@ -82,6 +97,8 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
 
   const boxRef = useRef(null)
   const [scale, setScale] = useState(0.5)
+  const [portrait, setPortrait] = useState(false)
+  const [rotateHintClosed, setRotateHintClosed] = useState(false)
   const [leaving, setLeaving] = useState(null) // { sceneId, kind, seq }
   const [messages, setMessages] = useState([])
   const [muted, setMuted] = useState(false)
@@ -100,7 +117,10 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   useEffect(() => {
     const el = boxRef.current
     if (!el) return
-    const measure = () => setScale(Math.min(el.clientWidth / CANVAS_W, el.clientHeight / CANVAS_H))
+    const measure = () => {
+      setScale(Math.min(el.clientWidth / CANVAS_W, el.clientHeight / CANVAS_H))
+      setPortrait(el.clientHeight > el.clientWidth * 1.1) // a tall screen shows the 16:9 scene small
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(el)
@@ -176,6 +196,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
 
   return (
     <div className="fixed inset-0 bg-black overflow-hidden select-none z-40" style={{ touchAction: 'manipulation' }}>
+      <Backdrop background={engine.background(scene)} assets={assets} />
       <div ref={boxRef} className="absolute inset-0 flex items-center justify-center">
         <div className="relative overflow-hidden" style={{ width: CANVAS_W * scale, height: CANVAS_H * scale }}>
           {leavingScene && (
@@ -195,12 +216,12 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
               />
             </div>
           </div>
+          {/* Exit buttons sit on the edges of the scene itself (not the screen), so they stay with the picture on any screen shape. */}
+          {!blocked && DIRECTIONS.filter((d) => scene.exits[d.key] && engine.scenes.has(scene.exits[d.key])).map((d) => (
+            <ExitButton key={d.key} direction={d.key} onClick={() => engine.tryExit(d.key)} />
+          ))}
         </div>
       </div>
-
-      {!blocked && DIRECTIONS.filter((d) => scene.exits[d.key] && engine.scenes.has(scene.exits[d.key])).map((d) => (
-        <ExitButton key={d.key} direction={d.key} onClick={() => engine.tryExit(d.key)} />
-      ))}
 
       <div className="absolute top-3 left-3 right-3 z-30 flex items-center gap-2 pointer-events-none">
         <button type="button" onClick={() => setConfirmExit(true)} className="pointer-events-auto bg-black/50 hover:bg-black/70 text-white rounded-full px-4 py-2 text-sm">
@@ -220,6 +241,15 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
           </button>
         )}
       </div>
+
+      {portrait && !rotateHintClosed && (
+        <div className="absolute top-16 left-3 right-3 z-30 bg-amber-100 text-amber-900 rounded-xl px-3 py-2 text-sm flex items-center gap-2 shadow">
+          <span className="flex-1">📱 把裝置轉成「橫向」，畫面會變大很多。</span>
+          <button type="button" onClick={() => setRotateHintClosed(true)} className="font-bold px-2">
+            知道了
+          </button>
+        </div>
+      )}
 
       {mode === 'preview' && debugOpen && <DebugPanel engine={engine} state={state} scenes={stage.scenes} flags={flags} onClose={() => setDebugOpen(false)} />}
 
