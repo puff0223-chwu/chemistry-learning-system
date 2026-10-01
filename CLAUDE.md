@@ -59,7 +59,7 @@
 5. 回報後停下，等老師確認再合併 main、再進下一階段。
 
 ## 目前階段
-舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。第 3 階段「畫布編輯器核心」已完成並上線（老師實測通過）。第 4 階段「播放器核心＋事件系統」已完成並上線（老師實測通過）。第 5 階段「答案鎖＋圖層群組」已完成並上線（老師實測通過；圖層群組已完成，滿足「第 7 階段前必須完成」）。**下一步：第 6 階段「關卡系統＋任務目標＋學習紀錄後台」**（里程碑：可上線第一個化學任務）。
+舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。第 3 階段「畫布編輯器核心」已完成並上線（老師實測通過）。第 4 階段「播放器核心＋事件系統」已完成並上線（老師實測通過）。第 5 階段「答案鎖＋圖層群組」已完成並上線（老師實測通過；圖層群組已完成，滿足「第 7 階段前必須完成」）。第 6 階段「關卡系統＋任務目標＋學習紀錄後台」已完成（待老師實測、合併 main；無新 SQL）。**下一步：規格書第十八節的第 7 階段**（里程碑：可上線第一個化學任務）。
 **老師指定待辦：圖層群組（規格書 6.3）必須在第 7 階段開工前完成**，每階段開工盤點時請確認此項狀態。詳見 `docs/PROGRESS.md`。
 
 
@@ -73,6 +73,8 @@
 - 答案鎖：判斷與加密在 `src/lib/lockLogic.js`（純函式，可用 node 測；每個題型的判斷同時支援明文與加密後的鎖，`protectLock`／`protectMission` 在發布時呼叫，見 `missions.js` 的 `publishMission`）；引擎的提示／放棄／解開在 `GameEngine`（`submitLock`、`requestHint`、`giveUp`）；學生答題畫面 `src/player/LockDialog.jsx`（全部點選操作）；老師出題介面 `src/editor/LockEditor.jsx`（四個分頁）。新增題型要同時改：`lockLogic.js`（`ANSWER_TYPES`、`newAnswer`、`plainTokens`/`checkAnswer`、`protectLock`、`validateLock`、`lockView`）、`LockDialog.jsx`、`LockEditor.jsx`，並補測試（明文與加密結果必須一致）。`answerDrafts`（切換題型暫存的舊答案）發布時一定要移除。
 - 群組與多選：規則在 `src/editor/groupOps.js`（純函式）；物件以 `groupId` 指向場景的 `groups`；引擎的 `groupMembers` 讓「讓東西出現／消失」能以群組為目標。
 - 事件編輯器 UX（老師實測後改版，請沿用）：用「進度記號」而不是「旗標」；記號只能從清單選或新增（`EventEditor.jsx` 的 `FlagPicker`），總覽與改名在 `FlagManager.jsx`；條件是句子式列表並自動顯示白話解釋（`ConditionEditor`、`describeCondition`）；步驟是依種類上色的卡片並提供常用範例（`RECIPES`）；物件互動在「外觀／互動」分頁；關卡的開場／過關方式／過關後集中在 `StageDialog.jsx`；圖示庫在 `icons.js`（可中文搜尋）。新增動作時，`ACTION_META`（含圖示、說明、分類顏色）也要補。
+- 多關卡（第 6 階段）：任務 JSON 的 `stages[]`＋`stageLinks[]`（規則見 `docs/PROGRESS.md` 第 6 階段）；引擎 `GameEngine` 管解鎖／目標／重置（旗標與目標狀態整任務共用，`goto_scene` 只限同一關）；編輯器 `StageMap.jsx`（關卡圖）、`StageDialog.jsx`（開場／過關／任務目標）、`graphLayout.js`（自動整理）；學生端 `src/player/StageUi.jsx`（關卡地圖畫面、目標欄）；發布健檢 `missionCheck.js` 已改為多關卡版。測試：`tests/stages.test.mjs`。
+- 後台任務紀錄：`src/pages/AdminMissionLogs.jsx`（`/admin/logs/mission`）、查詢 `src/lib/missionLogQueries.js`、統計與卡關分析（純函式）`src/lib/missionStats.js`（測試 `tests/mission-stats.test.mjs`）。新增事件類型時，要在 `missionStats.js` 的 `MISSION_EVENT_LABELS`／`describeMissionEvent` 補白話說明。
 - 紀錄：`src/lib/missionLogQueue.js`（IndexedDB 離線佇列；`createMissionRecorder` 產生遞增流水號）。**流水號與進度存檔必須一起存**（見 MissionPlay 的 `persist`），否則續玩會重複使用流水號而被資料庫丟掉紀錄。
 - 發布：編輯器「📢 發布」→ `missionCheck.js` 健檢 → `publishMission()`；是否對學生開放由任務列表的「開放給學生」控制。
 - 網址：學生 `/missions`、`/mission/:id`；後台編輯器 `/admin/missions/:id/edit`；後台素材庫 `/admin/assets`；後台 `/admin/missions`、`/admin/mission-categories`；舊版 `/task`、`/battle` 不變。
