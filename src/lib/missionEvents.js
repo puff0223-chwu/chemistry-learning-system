@@ -108,7 +108,8 @@ export function evalCondition(c, view) {
 
 // Calls fn(action) for every action in the list, including those inside if/then/else.
 export function walkActions(actions, fn) {
-  for (const a of actions ?? []) {
+  for (const a of Array.isArray(actions) ? actions : []) {
+    if (!a || typeof a !== 'object') continue // a damaged entry is skipped, not a crash
     if (isBranch(a)) {
       walkActions(a.then, fn)
       walkActions(a.else, fn)
@@ -117,7 +118,7 @@ export function walkActions(actions, fn) {
 }
 
 function branchConditions(list, into = []) {
-  for (const a of list ?? []) {
+  for (const a of Array.isArray(list) ? list : []) {
     if (isBranch(a)) {
       into.push(a.if)
       branchConditions(a.then, into)

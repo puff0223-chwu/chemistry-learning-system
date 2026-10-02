@@ -336,8 +336,9 @@ export default class GameEngine {
   }
 
   async runActions(list) {
-    for (const a of list ?? []) {
+    for (const a of Array.isArray(list) ? list : []) {
       if (this.destroyed) return
+      if (!a || typeof a !== 'object') continue
       if (isBranch(a)) {
         await this.runActions(this.check(a.if) ? a.then : a.else)
         continue
@@ -430,6 +431,7 @@ export default class GameEngine {
   // The dialog asks what it may offer: more hints? the "我真的不會" button?
   lockOptions(id) {
     const lock = this.lockObject(id)
+    if (!lock) return { canHint: false, canGiveUp: false, hintsTotal: 0 } // not a lock (or deleted since the progress was saved)
     const st = this.lockState(id)
     const total = this.lockHints(lock).length
     return {

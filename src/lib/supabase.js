@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+// plain node (the logic tests in tests/) has no import.meta.env: use harmless placeholders so importing this file works there
+const env = import.meta.env ?? { VITE_SUPABASE_URL: 'http://localhost:0', VITE_SUPABASE_PUBLISHABLE_KEY: 'placeholder-for-tests' }
+const supabaseUrl = env.VITE_SUPABASE_URL
+const supabaseAnonKey = env.VITE_SUPABASE_PUBLISHABLE_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('缺少 Supabase 環境變數，請確認 .env 檔案設定 VITE_SUPABASE_URL 與 VITE_SUPABASE_PUBLISHABLE_KEY')

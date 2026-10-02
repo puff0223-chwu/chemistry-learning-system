@@ -1,4 +1,4 @@
-import { lockDefaults } from './lockLogic.js'
+import { lockDefaults, repairLock } from './lockLogic.js'
 import { emptyMissionData } from './missions.js'
 
 // Logical canvas size (spec-v5 §6.2). Scenes are always laid out in 1600x900 and scaled to the screen.
@@ -92,23 +92,30 @@ export function createObject(type, extra = {}) {
 
 // Fills in anything missing so older / hand-imported drafts never crash the editor.
 // Works on a copy; the first stage holds the scenes (the stage map arrives in a later phase).
+// entries of a list that are not objects (null, numbers, text from a damaged file) are dropped
+const onlyObjects = (list) => (Array.isArray(list) ? list.filter((x) => x && typeof x === 'object' && !Array.isArray(x)) : [])
+
 export function normalizeDraft(raw) {
   const base = emptyMissionData()
   const data = { ...base, ...(raw && typeof raw === 'object' ? raw : {}) }
   data.settings = { ...base.settings, ...(data.settings ?? {}) }
-  data.stages = Array.isArray(data.stages) && data.stages.length > 0 ? data.stages : [createStage()]
-  data.stageLinks = Array.isArray(data.stageLinks) ? data.stageLinks : []
+  data.stages = onlyObjects(data.stages).length > 0 ? onlyObjects(data.stages) : [createStage()]
+  data.stageLinks = onlyObjects(data.stageLinks)
   data.stages = data.stages.map((stage, si) => ({
     ...createStage(stage.title),
     graphPos: { x: si * 300, y: 0 },
     ...stage,
-    objectives: stage.objectives ?? [],
-    scenes: (stage.scenes ?? []).map((scene, i) => ({
+    objectives: onlyObjects(stage.objectives),
+    scenes: onlyObjects(stage.scenes).map((scene, i) => ({
       ...createScene(scene.name ?? `場景 ${i + 1}`, { x: (i % 4) * 260, y: Math.floor(i / 4) * 200 }),
       ...scene,
-      exits: { ...emptyExits(), ...(scene.exits ?? {}) },
-      groups: scene.groups ?? [],
-      objects: (scene.objects ?? []).map((o) => ({ visible: true, locked: false, opacity: 1, rotation: 0, ...(o.type === 'lock' ? lockDefaults() : {}), ...o })),
+      exits: { ...emptyExits(), ...(scene.exits && typeof scene.exits === 'object' ? scene.exits : {}) },
+      exitConditions: scene.exitConditions && typeof scene.exitConditions === 'object' ? scene.exitConditions : {},
+      groups: onlyObjects(scene.groups),
+      objects: onlyObjects(scene.objects).map((o) => {
+        const object = { visible: true, locked: false, opacity: 1, rotation: 0, ...o }
+        return object.type === 'lock' ? repairLock(object) : object
+      }),
     })),
   }))
   for (const stage of data.stages) {

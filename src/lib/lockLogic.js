@@ -80,6 +80,43 @@ export function lockDefaults() {
   }
 }
 
+// Old, hand-edited or imported data can miss fields or hold the wrong shape (a null answer, hints that are not a list,
+// an unknown question type). Everything downstream (editor, health check, publishing, the game) can then rely on the shape.
+// Keeps every field of `value` that has the right kind of content, and fills the rest from `base` (the empty answer of that type).
+function fixAnswerShape(base, value) {
+  const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v)
+  const out = { ...value }
+  for (const key of Object.keys(base)) {
+    const b = base[key]
+    const v = value[key]
+    if (Array.isArray(b)) {
+      if (!Array.isArray(v)) out[key] = b
+      else if (b.length > 0 && isObject(b[0])) out[key] = v.filter(isObject)
+    } else if (isObject(b)) out[key] = isObject(v) ? { ...b, ...v } : b
+    else if (v === undefined) out[key] = b
+  }
+  return out
+}
+
+export function repairLock(lock) {
+  const base = lockDefaults()
+  const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v)
+  const answerType = ANSWER_TYPES.some((t) => t.type === lock.answerType) ? lock.answerType : 'text'
+  const list = (v, fallback) => (Array.isArray(v) ? v : fallback)
+  return {
+    ...base,
+    ...lock,
+    answerType,
+    // a published (protected) lock keeps its public answer as it is: its real answer is in `sealed`
+    answer: lock.sealed ? (isObject(lock.answer) ? lock.answer : {}) : isObject(lock.answer) ? fixAnswerShape(newAnswer(answerType), lock.answer) : newAnswer(answerType),
+    hints: list(lock.hints, base.hints),
+    giveUp: isObject(lock.giveUp) ? { ...base.giveUp, ...lock.giveUp } : base.giveUp,
+    wrongFeedback: list(lock.wrongFeedback, []),
+    onSuccess: list(lock.onSuccess, []),
+    onGiveUp: list(lock.onGiveUp, []),
+  }
+}
+
 // ---------------------------------------------------------------- text and number handling
 
 const SUBSCRIPTS = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9', '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '₊': '+', '₋': '-', '⁺': '+', '⁻': '-' }
@@ -338,19 +375,19 @@ export function summarizeInput(lock, input) {
       text = options(input)
       break
     case 'multiChoice':
-      text = (input ?? []).map(options).join('、')
+      text = (Array.isArray(input) ? input : []).map(options).join('、')
       break
     case 'order':
-      text = (input ?? []).map(options).join(' → ')
+      text = (Array.isArray(input) ? input : []).map(options).join(' → ')
       break
     case 'dial':
     case 'direction':
-      text = (input ?? []).join(' ')
+      text = (Array.isArray(input) ? input : []).join(' ')
       break
     default:
-      text = JSON.stringify(input ?? null)
+      text = JSON.stringify(input ?? null) ?? ''
   }
-  return text.slice(0, 300)
+  return String(text).slice(0, 300) // this is only for the log: whatever arrives must never break answering
 }
 
 // ---------------------------------------------------------------- protection (publish time)
@@ -426,7 +463,7 @@ export async function protectMission(data) {
   const copy = structuredClone(data)
   for (const stage of copy.stages) {
     for (const scene of stage.scenes) {
-      scene.objects = await Promise.all(scene.objects.map((o) => (o.type === 'lock' ? protectLock(o) : o)))
+      scene.objects = await Promise.all(scene.objects.map((o) => (o.type === 'lock' ? protectLock(repairLock(o)) : o)))
     }
   }
   return copy
