@@ -67,7 +67,7 @@
 5. 回報後停下，等老師確認再合併 main、再進下一階段。
 
 ## 目前階段
-舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。第 3 階段「畫布編輯器核心」已完成並上線（老師實測通過）。第 4 階段「播放器核心＋事件系統」已完成並上線（老師實測通過）。第 5 階段「答案鎖＋圖層群組」已完成並上線（老師實測通過；圖層群組已完成，滿足「第 7 階段前必須完成」）。第 6 階段「關卡系統＋任務目標＋學習紀錄後台」已完成並上線（老師實測通過；無新 SQL；含發布檢查「去修改」、題目精靈、右鍵選單、全面崩潰掃描、素材庫彈窗與面板收合、地點／物件／題目條件）。**下一步：規格書第十八節的第 7 階段**（里程碑：可上線第一個化學任務）。
+舊系統 Phase 1～2.5 與規格書第 1 階段「系統更名與地基」已完成並上線（SQL 已執行、老師實測通過）。第 2 階段「素材庫」已完成並上線（SQL 已執行、老師實測通過）。第 3 階段「畫布編輯器核心」已完成並上線（老師實測通過）。第 4 階段「播放器核心＋事件系統」已完成並上線（老師實測通過）。第 5 階段「答案鎖＋圖層群組」已完成並上線（老師實測通過；圖層群組已完成，滿足「第 7 階段前必須完成」）。第 6 階段「關卡系統＋任務目標＋學習紀錄後台」已完成並上線（老師實測通過；無新 SQL；含發布檢查「去修改」、題目精靈、右鍵選單、全面崩潰掃描、素材庫彈窗與面板收合、地點／物件／題目條件）。第 7 階段「物件互動」已完成（待老師實測、合併 main；無新 SQL）。**下一步：第 8 階段「工作台」**（規格書第十節）。
 **老師指定待辦：圖層群組（規格書 6.3）必須在第 7 階段開工前完成**，每階段開工盤點時請確認此項狀態。詳見 `docs/PROGRESS.md`。
 
 
@@ -85,6 +85,7 @@
 - 後台任務紀錄：`src/pages/AdminMissionLogs.jsx`（`/admin/logs/mission`）、查詢 `src/lib/missionLogQueries.js`、統計與卡關分析（純函式）`src/lib/missionStats.js`（測試 `tests/mission-stats.test.mjs`）。新增事件類型時，要在 `missionStats.js` 的 `MISSION_EVENT_LABELS`／`describeMissionEvent` 補白話說明。
 - 條件（`ConditionEditor`／`evalCondition`／`describeCondition`）：除了進度記號，遊戲自己追蹤「去過的地點 `visited`、點過的物件 `clicked`、解開的題目（`locks[id].solved`）」，條件欄位見 `missionEvents.js` 的 `FACT_KEYS`。新增這類事實時，引擎狀態、判斷、白話說明、重玩重置、發布檢查、`tests/fuzz-data.mjs` 都要一起補。素材庫彈窗 `AssetLibraryDialog.jsx`、左右面板收合（`MissionEditor.jsx` 的 `PanelToggle`）也在編輯器外殼。
 - 崩潰測試工具：`tests/fuzz.test.mjs`（亂數壞任務丟進整條流程，已在 `npm test`）、`tests/fuzz-data.mjs`（亂數任務產生器，種子固定）；載入時的資料修復在 `missionSchema.js` 的 `normalizeDraft`（丟掉壞項目、重複 id 換新）與 `lockLogic.js` 的 `repairLock`；友善錯誤頁在 `src/components/CrashPage.jsx`（整頁／面板／缺環境變數三種），錯誤邊界掛在 `main.jsx` 與編輯器右側面板。每個大階段結束建議再做一次全面崩潰掃描（做法見經驗庫）。
+- 物品、證物袋、插座、裝置（第 7 階段）：資料在任務 JSON 的 `items`／`combinations` 與物件的 `collectible`／`itemId`／`moveInScene`、`socket`／`device` 類型（預設值與修復在 `missionSchema.js` 的 `createObject`／`repairSocket`／`repairDevice`）；引擎在 `GameEngine` 的「items, the evidence bag, sockets and devices」一段（`collect`、`useItemOnSocket`、`combineItems`、`operateDevice`、`setDeviceState`）；編輯器 `ItemsDialog.jsx`（物品清單與組合）、`KindProperties.jsx`（插座與裝置的屬性）、物件「互動」分頁的 `AbilitiesBlock`（撿起／拖開）；學生端 `src/player/BagUi.jsx`（證物袋抽屜、拖曳、提示小訊息、物品檢視）。新增事件、條件或紀錄種類時同步更新：`ACTION_META`、`describeAction`、`describeCondition`、`missionCheck.js`、`missionStats.js`、`tests/fuzz-data.mjs`。測試：`tests/items.test.mjs`。
 - 題目精靈與右鍵選單：`src/editor/LockWizard.jsx`（新增答案鎖時自動打開，直接編輯那一題；新增題型時精靈的題型卡片 `COMMON`/`EXAMPLES` 也要看一下）、`src/editor/ContextMenu.jsx`（通用選單元件），選單內容由 `MissionEditor.jsx` 的 `openObjectMenu`／`openCanvasMenu`／`openSceneMenu` 組出；新增常用物件操作時，請順手加進右鍵選單。
 - 紀錄：`src/lib/missionLogQueue.js`（IndexedDB 離線佇列；`createMissionRecorder` 產生遞增流水號）。**流水號與進度存檔必須一起存**（見 MissionPlay 的 `persist`），否則續玩會重複使用流水號而被資料庫丟掉紀錄。
 - 發布：編輯器「📢 發布」→ `missionCheck.js` 健檢 → `publishMission()`；是否對學生開放由任務列表的「開放給學生」控制。

@@ -194,7 +194,7 @@ export function DeviceProperties({ object, ctx, assets, assetMap, onUpdate }) {
         </Section>
       )}
 
-      <Section title="④ 變成某個狀態時，會發生什麼事？" hint="可以用來連動下一個機關，例如燈打開時記住「亮了」，讓線索出現。不需要的狀態留空。">
+      <Section title={`${object.clickToCycle !== false ? "④" : "③"} 變成某個狀態時，會發生什麼事？`} hint="可以用來連動下一個機關，例如燈打開時記住「亮了」，讓線索出現。不需要的狀態留空。">
         {states.map((s) => (
           <details key={s.id} open={(object.onState?.[s.id] ?? []).length > 0} className="border border-slate-200 rounded-lg p-2">
             <summary className="cursor-pointer text-sm font-bold">

@@ -496,7 +496,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
             title="把任務分成好幾關（可以排成一條線、分支或同時開放）"
             className="px-2 py-1 rounded hover:bg-white/10 text-sm"
           >
-            ＋ 新增關卡
+            ＋ 關卡
           </button>
         )}
         <div className="flex gap-1">
@@ -509,7 +509,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
             title="開場說明、怎樣算過關、任務目標、重玩時要不要重置"
             className="px-2 py-1 rounded hover:bg-white/10 text-sm"
           >
-            🏁 關卡設定
+            🏁 設定
           </button>
           <button type="button" onClick={() => setFlagsOpen(true)} title="學生做過的事（記號）一覽，可改名" className="px-2 py-1 rounded hover:bg-white/10 text-sm">
             📌 記號{usage.size ? ` (${usage.size})` : ''}

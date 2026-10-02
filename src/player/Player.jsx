@@ -430,7 +430,9 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
       )}
 
       {lockOpen && (
+        // one dialog per question: when an event opens the next question right after one was solved, the old answer must not carry over
         <LockDialog
+          key={lockOpen.id}
           engine={engine}
           lockId={lockOpen.id}
           assets={assets}
