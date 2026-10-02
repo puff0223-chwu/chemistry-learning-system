@@ -24,7 +24,7 @@ async function play(mission, r, saved = null, steps = 40) {
   await engine.start()
   const all = [...engine.objects.values()].map((x) => x.object)
   for (let i = 0; i < steps; i++) {
-    const op = Math.floor(r() * 10)
+    const op = Math.floor(r() * 13)
     if (op === 0 && all.length) await engine.clickObject(pick(all))
     else if (op === 1) await engine.tryExit(pick(DIRS))
     else if (op === 2 && all.length) await engine.submitLock(pick(all).id, pick(INPUTS))
@@ -37,6 +37,9 @@ async function play(mission, r, saved = null, steps = 40) {
       const goals = engine.currentObjectives()
       if (goals.length) engine.requestObjectiveHint(pick(goals).objective?.objectiveId ?? goals[0].objectiveId)
     } else if (op === 9) engine.stageCards()
+    else if (op === 10 && all.length) await engine.useItemOnSocket(pick(all).id, pick([...(mission.items ?? []).map((it) => it.itemId), 'ghost_item', ...engine.state.items]))
+    else if (op === 11) await engine.combineItems(pick([...engine.state.items, 'ghost_item']), pick([...engine.state.items, 'ghost_item']))
+    else if (op === 12) engine.bag()
     engine.view()
     engine.scene()
     JSON.stringify(engine.serialize())

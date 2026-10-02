@@ -12,6 +12,9 @@ const freshState = () => ({
   notebook: [],
   objectivesDone: [],
   objectiveHints: {}, // objectiveId -> how many hints were shown
+  devices: {}, // deviceId -> the id of the state it is in now (every device starts in its initialState)
+  socketsDone: {}, // socketId -> true once the right item went in
+  socketTries: {}, // socketId -> how many times it was tapped with nothing in hand (to walk through its hints)
   visited: {}, // sceneId -> true once the student has been in that scene
   clicked: {}, // objectId -> true once the student has clicked / opened it
   visibility: {}, // objectId -> true/false, set by reveal_object / hide_object
@@ -68,6 +71,10 @@ export default class GameEngine {
     }
     // `transition` is display-only (which way the last scene change should animate) and never saved.
     this.state = { ...base, transition: null, tick: 0 }
+    // every device is in its starting state until something changes it (a saved game from before devices existed has none)
+    for (const { object } of this.objects.values()) {
+      if (object.type === 'device' && !this.deviceState(object, this.state.devices)) this.state.devices = { ...this.state.devices, [object.id]: object.initialState }
+    }
     this.refreshUnlocks({ silent: true })
     this.runStart = now()
     this.elapsedBase = base.elapsedMs ?? 0
@@ -120,6 +127,7 @@ export default class GameEngine {
       flags: s.flags,
       items: s.items,
       objectivesDone: s.objectivesDone,
+      devices: s.devices,
       visited: s.visited,
       clicked: s.clicked,
       locks: s.locks,
@@ -240,6 +248,10 @@ export default class GameEngine {
       flags: drop(this.state.flags, (f) => !ownFlags.has(f)),
       objectivesDone: this.state.objectivesDone.filter((id) => !ownObjectives.has(id)),
       objectiveHints: drop(this.state.objectiveHints, (id) => !ownObjectives.has(id)),
+      // devices go back to their starting state (they are never left without one)
+      devices: { ...drop(this.state.devices, (id) => !objectIds.has(id)), ...Object.fromEntries(st.scenes.flatMap((sc) => sc.objects.filter((o) => o.type === 'device').map((o) => [o.id, o.initialState]))) },
+      socketsDone: drop(this.state.socketsDone, (id) => !objectIds.has(id)),
+      socketTries: drop(this.state.socketTries, (id) => !objectIds.has(id)),
       visited: drop(this.state.visited, (id) => !sceneIds.has(id)),
       clicked: drop(this.state.clicked, (id) => !objectIds.has(id)),
       lastScene: drop(this.state.lastScene, (id) => id !== stageId),
@@ -309,9 +321,142 @@ export default class GameEngine {
       await this.checkCompletion()
       return
     }
+    if (object.type === 'device') {
+      await this.operateDevice(object)
+      await this.checkCompletion()
+      return
+    }
+    if (object.type === 'socket') {
+      await this.pokeSocket(object)
+      await this.checkCompletion()
+      return
+    }
+    if (object.collectible && object.itemId) this.collect(object)
     if (object.logClick) this.log('object_click', { blockId: object.id })
     await this.runActions(object.onClick ?? [])
     await this.checkCompletion()
+  }
+
+  // ---- items, the evidence bag, sockets and devices (spec-v5 §8, §12.1) ------------------------------------
+
+  itemDef(itemId) {
+    return (this.mission.items ?? []).find((it) => it.itemId === itemId) ?? null
+  }
+
+  // The items the student holds, as their definitions (an item that was deleted from the mission is simply not shown).
+  bag() {
+    return this.state.items.map((id) => this.itemDef(id)).filter(Boolean)
+  }
+
+  toast(text) {
+    this.ui.toast?.(text)
+  }
+
+  addItem(itemId) {
+    if (!itemId || this.state.items.includes(itemId)) return false
+    this.setState({ items: [...this.state.items, itemId] })
+    this.log('item_collect', { payload: { itemId } })
+    return true
+  }
+
+  removeItem(itemId) {
+    if (!this.state.items.includes(itemId)) return false
+    this.setState({ items: this.state.items.filter((id) => id !== itemId) })
+    return true
+  }
+
+  // A pick-up-able object: its item goes into the bag and the object leaves the scene.
+  collect(object) {
+    const added = this.addItem(object.itemId)
+    this.setState({ visibility: { ...this.state.visibility, [object.id]: false } })
+    const def = this.itemDef(object.itemId)
+    if (added && def) this.toast(`撿到了「${def.name || '物品'}」`)
+  }
+
+  // Puts an item from the bag into a socket. Resolves to { matched }.
+  async useItemOnSocket(socketId, itemId) {
+    const entry = this.objects.get(socketId)
+    const socket = entry?.object
+    if (!socket || socket.type !== 'socket' || !this.state.items.includes(itemId)) return { matched: false }
+    if ((socket.accepts ?? []).includes(itemId)) {
+      if (socket.consumeItem !== false) this.removeItem(itemId)
+      this.setState({ socketsDone: { ...this.state.socketsDone, [socketId]: true } })
+      this.log('socket_match', { blockId: socketId, payload: { itemId } })
+      await this.runActions(socket.onMatch ?? [])
+      await this.checkCompletion()
+      return { matched: true }
+    }
+    this.log('socket_wrong', { blockId: socketId, payload: { itemId } })
+    if ((socket.onWrongItem ?? []).length) await this.runActions(socket.onWrongItem)
+    else this.toast('好像插不進去…')
+    return { matched: false }
+  }
+
+  // Tapping a socket with nothing in hand: it gives its hints one by one.
+  async pokeSocket(socket) {
+    const hints = (socket.hints ?? []).filter((h) => h && h.trim())
+    const tries = this.state.socketTries[socket.id] ?? 0
+    this.setState({ socketTries: { ...this.state.socketTries, [socket.id]: tries + 1 } })
+    if (hints.length) this.toast(hints[Math.min(tries, hints.length - 1)])
+    else this.toast('這裡好像可以放什麼東西…')
+    if (socket.onClick?.length) await this.runActions(socket.onClick)
+  }
+
+  // Two items in the bag that the teacher defined as a pair become the result item. Resolves to { ok, result }.
+  async combineItems(aId, bId) {
+    if (aId === bId || !this.state.items.includes(aId) || !this.state.items.includes(bId)) return { ok: false }
+    const recipe = (this.mission.combinations ?? []).find((c) => (c.a === aId && c.b === bId) || (c.a === bId && c.b === aId))
+    if (!recipe || !this.itemDef(recipe.result)) {
+      this.toast('這兩樣東西湊不在一起')
+      return { ok: false }
+    }
+    this.removeItem(aId)
+    this.removeItem(bId)
+    this.addItem(recipe.result)
+    this.log('item_combine', { payload: { a: aId, b: bId, result: recipe.result } })
+    this.toast(recipe.message?.trim() || `做出了「${this.itemDef(recipe.result).name || '新物品'}」`)
+    await this.checkCompletion()
+    return { ok: true, result: recipe.result }
+  }
+
+  deviceState(object, devices = this.state.devices) {
+    const id = devices?.[object.id]
+    return (object.states ?? []).some((s) => s.id === id) ? id : null
+  }
+
+  // A device's click: if it may be operated and clicks cycle it, go to the next state.
+  async operateDevice(object) {
+    if (!object.clickToCycle) {
+      if (object.operateMessage) await this.ui.message?.(object.operateMessage)
+      return
+    }
+    if (!isEmptyCondition(object.operateWhen) && !this.check(object.operateWhen)) {
+      await this.ui.message?.(object.operateMessage || '現在還不能操作。')
+      return
+    }
+    const states = object.states ?? []
+    if (states.length < 2) return
+    const now = states.findIndex((s) => s.id === this.deviceState(object))
+    await this.setDeviceState(object.id, states[(now + 1) % states.length].id)
+  }
+
+  // Used by the clicks above and by the "change device state" event. Runs the new state's events.
+  async setDeviceState(deviceId, stateId) {
+    const object = this.objects.get(deviceId)?.object
+    if (!object || object.type !== 'device' || !(object.states ?? []).some((s) => s.id === stateId)) return
+    if (this.deviceState(object) === stateId) return
+    if (this.depth >= MAX_CHAIN_DEPTH) {
+      console.error('[player] 裝置連鎖改變次數過多，已停止（請檢查「裝置變成某狀態時」的事件是否互相觸發）')
+      return
+    }
+    this.setState({ devices: { ...this.state.devices, [deviceId]: stateId } })
+    this.log('device_state', { blockId: deviceId, payload: { state: stateId } })
+    this.depth += 1
+    try {
+      await this.runActions(object.onState?.[stateId] ?? [])
+    } finally {
+      this.depth -= 1
+    }
   }
 
   // ---- the executor -----------------------------------------------------------------------------
@@ -386,13 +531,16 @@ export default class GameEngine {
         break
       }
       case 'add_item':
-        if (a.itemId && !this.state.items.includes(a.itemId)) {
-          this.setState({ items: [...this.state.items, a.itemId] })
-          this.log('item_collect', { payload: { itemId: a.itemId } })
+        if (this.addItem(a.itemId)) {
+          const def = this.itemDef(a.itemId)
+          if (def) this.toast(`拿到了「${def.name || '物品'}」`)
         }
         break
       case 'remove_item':
-        this.setState({ items: this.state.items.filter((id) => id !== a.itemId) })
+        this.removeItem(a.itemId)
+        break
+      case 'set_state':
+        await this.setDeviceState(a.target, a.state)
         break
       case 'swap_background':
         if (a.sceneId && a.assetId) this.setState({ backgrounds: { ...this.state.backgrounds, [a.sceneId]: { type: 'image', assetId: a.assetId } } })

@@ -21,6 +21,9 @@ export function checkMission(data, existingAssetIds) {
   const lockById = new Map(stages.flatMap((st) => st.scenes.flatMap((s) => s.objects.filter((o) => o.type === 'lock').map((o) => [o.id, o]))))
   // a group can be the target of "show / hide"
   const groupIds = new Set(stages.flatMap((st) => st.scenes.flatMap((s) => (s.groups ?? []).map((g) => g.id))))
+  const itemIds = new Set((data.items ?? []).map((i) => i.itemId))
+  const deviceById = new Map([...objectById].filter(([, { object }]) => object.type === 'device').map(([id, { object }]) => [id, object]))
+  const obtainable = new Set() // items the student can get: picked up, given by an event, or made by a combination
   const objectiveIds = new Set(stages.flatMap((st) => (st.objectives ?? []).map((o) => o.objectiveId)))
   const where = (st) => (multi ? `關卡「${st.title}」：` : '')
 
@@ -72,6 +75,22 @@ export function checkMission(data, existingAssetIds) {
           if (!a.target) err(`${label}：「出一道題目」還沒選是哪一題。`, place)
           else if (!lockById.has(a.target)) err(`${label}：「出一道題目」指向不存在（或已刪除）的答案鎖。`, place)
           break
+        case 'add_item':
+        case 'remove_item': {
+          const verb = a.action === 'add_item' ? '放進證物袋' : '從證物袋拿走'
+          if (!a.itemId) err(`${label}：「${verb}」還沒選物品。`, place)
+          else if (!itemIds.has(a.itemId)) err(`${label}：「${verb}」指向不存在（或已刪除）的物品。`, place)
+          else if (a.action === 'add_item') obtainable.add(a.itemId)
+          break
+        }
+        case 'set_state': {
+          const device = deviceById.get(a.target)
+          if (!a.target) err(`${label}：「改變裝置狀態」還沒選裝置。`, place)
+          else if (!device) err(`${label}：「改變裝置狀態」指向不存在（或已刪除）的裝置。`, place)
+          else if (!a.state) err(`${label}：「改變裝置狀態」還沒選要變成哪個狀態。`, place)
+          else if (!device.states.some((s) => s.id === a.state)) err(`${label}：「改變裝置狀態」指向裝置上不存在的狀態。`, place)
+          break
+        }
         case 'complete_objective':
           if (!a.objectiveId) err(`${label}：「完成任務目標」還沒選是哪一個目標。`, place)
           else if (!objectiveIds.has(a.objectiveId)) err(`${label}：「完成任務目標」指向不存在（或已刪除）的目標。`, place)
@@ -115,6 +134,12 @@ export function checkMission(data, existingAssetIds) {
       if (gone(['visitedScenes', 'notVisitedScenes'], (id) => sceneById.has(id))) err(`${source.label}：條件用到已經刪除的地點（場景），請重新選擇。`, source.where)
       if (gone(['clickedObjects', 'notClickedObjects'], (id) => objectById.has(id))) err(`${source.label}：條件用到已經刪除的物件，請重新選擇。`, source.where)
       if (gone(['solvedLocks', 'notSolvedLocks'], (id) => lockById.has(id))) err(`${source.label}：條件用到已經刪除的題目，請重新選擇。`, source.where)
+      if (gone(['hasItems', 'notHasItems'], (id) => itemIds.has(id))) err(`${source.label}：條件用到已經刪除的物品，請重新選擇。`, source.where)
+      for (const d of Array.isArray(c?.deviceStates) ? c.deviceStates : []) {
+        if (!d?.target) continue
+        const device = deviceById.get(d.target)
+        if (!device || (d.state && !device.states.some((s) => s.id === d.state))) err(`${source.label}：條件用到已經刪除的裝置或裝置狀態，請重新選擇。`, source.where)
+      }
       const blank = ['allFlags', 'anyFlags', 'notFlags', 'objectivesDone', ...FACT_KEYS].some((k) => (c?.[k] ?? []).some((f) => !f))
       if (blank) warn(`${source.label}：有一個條件還沒選是哪一項，目前會被忽略。`, source.where)
     }
@@ -136,12 +161,40 @@ export function checkMission(data, existingAssetIds) {
       if (scene.background?.type === 'image' && !scene.background.assetId) err(`${where(st)}場景「${scene.name}」的背景圖還沒選。`, { stageId: st.stageId, sceneId: scene.sceneId })
       if (scene.background?.assetId && !existingAssetIds.has(scene.background.assetId)) err(`${where(st)}場景「${scene.name}」的背景圖已經從素材庫刪除，請重新選擇。`, { stageId: st.stageId, sceneId: scene.sceneId })
       for (const o of scene.objects) {
+        const here = { stageId: st.stageId, sceneId: scene.sceneId, objectId: o.id }
+        if (o.collectible) {
+          if (!o.itemId) err(`${where(st)}場景「${scene.name}」的「${o.name}」設成可以撿起，但還沒選是哪一個物品。`, here)
+          else if (!itemIds.has(o.itemId)) err(`${where(st)}場景「${scene.name}」的「${o.name}」撿起的物品已經從物品清單刪除，請重新選擇。`, here)
+          else obtainable.add(o.itemId)
+        }
+        if (o.type === 'socket') {
+          const accepts = (o.accepts ?? []).filter(Boolean)
+          if (accepts.length === 0) err(`${where(st)}場景「${scene.name}」的插座「${o.name}」還沒設定要放哪個物品。`, here)
+          else if (accepts.some((id) => !itemIds.has(id))) err(`${where(st)}場景「${scene.name}」的插座「${o.name}」接受的物品已經從物品清單刪除，請重新選擇。`, here)
+          if ((o.onMatch ?? []).length === 0) warn(`${where(st)}場景「${scene.name}」的插座「${o.name}」放對物品後什麼事都不會發生。`, here)
+        }
+        if (o.type === 'device' && (o.states ?? []).length < 2) err(`${where(st)}場景「${scene.name}」的裝置「${o.name}」至少要有 2 個狀態。`, here)
+      }
+      for (const o of scene.objects) {
         if ((o.type === 'image' || (o.type === 'video' && !o.youtubeUrl)) && !o.assetId) {
           warn(`${where(st)}場景「${scene.name}」的「${o.name}」還沒選素材（學生會看到佔位圖）。`, { stageId: st.stageId, sceneId: scene.sceneId, objectId: o.id })
         }
         if (o.assetId && !existingAssetIds.has(o.assetId)) err(`${where(st)}場景「${scene.name}」的「${o.name}」用到的素材已經從素材庫刪除，請重新選擇。`, { stageId: st.stageId, sceneId: scene.sceneId, objectId: o.id })
       }
     }
+  }
+
+  // ---- items: combinations, and items nobody can ever get
+  for (const c of data.combinations ?? []) {
+    if (!itemIds.has(c.a) || !itemIds.has(c.b) || !itemIds.has(c.result)) err('有一個物品組合用到已經刪除（或還沒選）的物品。', { dialog: 'items' })
+    else {
+      if (c.a === c.b) err('有一個物品組合的兩邊是同一個物品。', { dialog: 'items' })
+      obtainable.add(c.result)
+    }
+  }
+  for (const item of data.items ?? []) {
+    if (!item.name?.trim()) warn('有一個物品還沒取名字。', { dialog: 'items' })
+    if (!obtainable.has(item.itemId)) warn(`物品「${item.name || '（未命名）'}」沒有任何地方可以取得（沒有物件設成可撿起、沒有事件會給、也不是合成的結果）。`, { dialog: 'items' })
   }
 
   // ---- scenes nobody can walk into (per stage, from its start scene)

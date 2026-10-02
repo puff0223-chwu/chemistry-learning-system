@@ -15,6 +15,10 @@ export const MISSION_EVENT_LABELS = {
   objective_done: '完成任務目標',
   mission_complete: '完成任務',
   mission_quit: '中途離開',
+  socket_match: '放進插座（對）',
+  socket_wrong: '放進插座（錯）',
+  device_state: '改變裝置',
+  item_combine: '組合物品',
 }
 
 const pct = (part, whole) => (whole ? `${Math.round((part / whole) * 1000) / 10}%` : '—')
@@ -22,7 +26,8 @@ const round1 = (n) => Math.round(n * 10) / 10
 
 // 從任務資料（已發布版本）整理「代號 → 老師看得懂的名字」。
 export function buildNames(data) {
-  const names = { stages: new Map(), scenes: new Map(), blocks: new Map(), locks: new Map(), objectives: new Map() }
+  const names = { stages: new Map(), scenes: new Map(), blocks: new Map(), locks: new Map(), objectives: new Map(), items: new Map(), states: new Map() }
+  for (const it of data?.items ?? []) if (it && typeof it === 'object') names.items.set(it.itemId, it.name)
   for (const st of data?.stages ?? []) {
     names.stages.set(st.stageId, st.title)
     for (const o of st.objectives ?? []) names.objectives.set(o.objectiveId, o.text)
@@ -30,6 +35,7 @@ export function buildNames(data) {
       names.scenes.set(sc.sceneId, sc.name)
       for (const ob of sc.objects ?? []) {
         names.blocks.set(ob.id, ob.name)
+        if (ob.type === 'device') for (const stt of (Array.isArray(ob.states) ? ob.states : []).filter((x) => x && typeof x === 'object')) names.states.set(stt.id, stt.name)
         if (ob.type === 'lock') names.locks.set(ob.id, { name: ob.name, scene: sc.name, stage: st.title })
       }
     }
@@ -38,7 +44,7 @@ export function buildNames(data) {
 }
 
 export function mergeNames(list) {
-  const out = { stages: new Map(), scenes: new Map(), blocks: new Map(), locks: new Map(), objectives: new Map() }
+  const out = { stages: new Map(), scenes: new Map(), blocks: new Map(), locks: new Map(), objectives: new Map(), items: new Map(), states: new Map() }
   for (const n of list) for (const key of Object.keys(out)) for (const [k, v] of n[key]) out[key].set(k, v)
   return out
 }
@@ -61,7 +67,14 @@ export function describeMissionEvent(log, names) {
     case 'object_click':
       return block
     case 'item_collect':
-      return p.itemId ?? ''
+      return lookup(names.items, p.itemId, p.itemId ?? '')
+    case 'socket_match':
+    case 'socket_wrong':
+      return `${block}：${lookup(names.items, p.itemId, '（物品）')}`
+    case 'device_state':
+      return `${block}：${lookup(names.states, p.state, p.state ?? '')}`
+    case 'item_combine':
+      return `${lookup(names.items, p.a, '？')} ＋ ${lookup(names.items, p.b, '？')} → ${lookup(names.items, p.result, '？')}`
     case 'lock_attempt':
       return `${block}：「${p.answer ?? ''}」${p.correct ? '✅ 答對' : '❌ 答錯'}（第 ${p.attempt ?? '?'} 次）`
     case 'lock_solved':

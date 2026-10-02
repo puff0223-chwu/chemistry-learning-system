@@ -18,6 +18,9 @@ export const ACTION_META = [
   { type: 'play_sound', icon: '🔊', label: '播放音效', desc: '播放素材庫裡的音訊', category: 'flow' },
   { type: 'open_lock', icon: '🔐', label: '出一道題目', desc: '讓學生回答某個答案鎖（題目）', category: 'lock' },
   { type: 'delay', icon: '⏱️', label: '等一下', desc: '停幾秒再做下一件事', category: 'flow' },
+  { type: 'add_item', icon: '🎒', label: '放進證物袋', desc: '讓學生拿到一件物品', category: 'item' },
+  { type: 'remove_item', icon: '🫳', label: '從證物袋拿走', desc: '證物袋裡少一件物品', category: 'item' },
+  { type: 'set_state', icon: '💡', label: '改變裝置狀態', desc: '例如把燈打開、把櫃門關上', category: 'device' },
   { type: 'complete_objective', icon: '🎯', label: '完成任務目標', desc: '讓某個任務目標變成「已完成」', category: 'goal' },
   { type: 'complete_stage', icon: '🏁', label: '讓學生過關', desc: '學生完成這一關', category: 'goal' },
 ]
@@ -25,7 +28,7 @@ export const ACTION_TYPES = ACTION_META.map(({ type, label }) => ({ type, label 
 export const actionMeta = (type) => ACTION_META.find((m) => m.type === type)
 
 // Actions the engine cannot run yet (their blocks arrive later); they are skipped with a console note.
-export const DEFERRED_ACTIONS = ['set_state', 'open_workbench']
+export const DEFERRED_ACTIONS = ['open_workbench']
 
 export const TRANSITIONS = [
   { value: '', label: '淡入（預設）' },
@@ -57,6 +60,11 @@ export function newAction(type) {
       return { action: type, target: null }
     case 'complete_objective':
       return { action: type, objectiveId: null }
+    case 'add_item':
+    case 'remove_item':
+      return { action: type, itemId: null }
+    case 'set_state':
+      return { action: type, target: null, state: null }
     case 'delay':
       return { action: type, ms: 1000 }
     case 'if':
@@ -78,12 +86,17 @@ const names = (list) => (list ?? []).filter(Boolean)
 // places visited, objects clicked, questions solved. Each has a "has" and a "has not" version.
 export const FACT_KEYS = ['visitedScenes', 'notVisitedScenes', 'clickedObjects', 'notClickedObjects', 'solvedLocks', 'notSolvedLocks']
 
+// "this device is in that state" rows that are filled in (both parts chosen)
+const deviceChecks = (c) => (Array.isArray(c?.deviceStates) ? c.deviceStates : []).filter((d) => d && d.target && d.state)
+
 export function isEmptyCondition(c) {
   if (!c) return true
   return (
     FLAG_KEYS.every((k) => names(c[k]).length === 0) &&
     FACT_KEYS.every((k) => names(c[k]).length === 0) &&
-    !(c.hasItems?.length > 0) &&
+    names(c.hasItems).length === 0 &&
+    names(c.notHasItems).length === 0 &&
+    deviceChecks(c).length === 0 &&
     names(c.objectivesDone).length === 0 &&
     !(c.notebookCountAtLeast > 0) &&
     !(c.elapsedSecondsAtLeast > 0)
@@ -101,7 +114,9 @@ export function evalCondition(c, view) {
   if (all.length && !all.every(has)) return false
   if (any.length && !any.some(has)) return false
   if (none.length && none.some(has)) return false
-  if (c.hasItems?.length && !c.hasItems.every((id) => view.items.includes(id))) return false
+  if (!names(c.hasItems).every((id) => view.items.includes(id))) return false
+  if (names(c.notHasItems).some((id) => view.items.includes(id))) return false
+  if (!deviceChecks(c).every((d) => view.devices?.[d.target] === d.state)) return false
   const goals = names(c.objectivesDone)
   if (goals.length && !goals.every((id) => view.objectivesDone.includes(id))) return false
   const visited = view.visited ?? {}
@@ -176,6 +191,14 @@ export function listSources(data) {
     for (const o of scene.objects) {
       addActions(`場景「${scene.name}」的「${o.name}」被點擊時`, o.onClick, { sceneId: scene.sceneId, objectId: o.id })
       addCondition(`場景「${scene.name}」的「${o.name}」的出現條件`, o.showWhen, { sceneId: scene.sceneId, objectId: o.id })
+      if (o.type === 'socket') {
+        addActions(`場景「${scene.name}」的插座「${o.name}」放對物品時`, o.onMatch, { sceneId: scene.sceneId, objectId: o.id })
+        addActions(`場景「${scene.name}」的插座「${o.name}」放錯物品時`, o.onWrongItem, { sceneId: scene.sceneId, objectId: o.id })
+      }
+      if (o.type === 'device') {
+        addCondition(`場景「${scene.name}」的裝置「${o.name}」的可操作條件`, o.operateWhen, { sceneId: scene.sceneId, objectId: o.id })
+        for (const st of o.states ?? []) addActions(`場景「${scene.name}」的裝置「${o.name}」變成「${st.name}」時`, o.onState?.[st.id], { sceneId: scene.sceneId, objectId: o.id })
+      }
       if (o.type === 'lock') {
         addActions(`場景「${scene.name}」的答案鎖「${o.name}」答對時`, o.onSuccess, { sceneId: scene.sceneId, objectId: o.id })
         addActions(`場景「${scene.name}」的答案鎖「${o.name}」按「我真的不會」時`, o.onGiveUp, { sceneId: scene.sceneId, objectId: o.id })
@@ -276,6 +299,12 @@ export function describeCondition(c, ctx = null) {
   if (names(c.notClickedObjects).length) parts.push(`還沒點過${called(ctx?.things, c.notClickedObjects)}`)
   if (names(c.solvedLocks).length) parts.push(`解開了${called(ctx?.locks, c.solvedLocks)}`)
   if (names(c.notSolvedLocks).length) parts.push(`還沒解開${called(ctx?.locks, c.notSolvedLocks)}`)
+  if (names(c.hasItems).length) parts.push(`證物袋裡有${called(ctx?.items, c.hasItems)}`)
+  if (names(c.notHasItems).length) parts.push(`證物袋裡沒有${called(ctx?.items, c.notHasItems)}`)
+  for (const d of deviceChecks(c)) {
+    const dev = ctx?.devices?.find((x) => x.id === d.target)
+    parts.push(`${quote(dev?.name ?? '？')}是「${dev?.states?.find((s) => s.id === d.state)?.name ?? '？'}」的狀態`)
+  }
   if (names(c.objectivesDone).length) parts.push(`已完成目標${names(c.objectivesDone).map((id) => quote(ctx?.objectives?.find((o) => o.id === id)?.text ?? '？')).join('、')}`)
   if (c.elapsedSecondsAtLeast > 0) parts.push(`遊戲開始超過 ${c.elapsedSecondsAtLeast} 秒`)
   return `學生${parts.join('，而且')}`

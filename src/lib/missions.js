@@ -17,11 +17,13 @@ export function emptyMissionData() {
       notebookCategories: ['現場觀察', '證物特徵', '計算結果'],
       labCategories: ['物理鑑定', '化學鑑定', '生物科技鑑定', '一般觀察'],
       giveUpDefault: { enabled: true, afterAttempts: 3 },
+      showBag: true, // the evidence bag button on the student screen
       hideLockedStages: false, // student stage map: hide stages that are still locked
       autoNextStage: false, // after finishing a stage, walk straight into the single next one
     },
     flags: {},
-    items: [],
+    items: [], // { itemId, name, icon, assetId, description }
+    combinations: [], // { id, a, b, result, message }: item a + item b make item result
     stages: [],
     stageLinks: [],
     finalChallenge: null,

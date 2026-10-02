@@ -23,6 +23,16 @@ export const OBJECT_TYPE_LABELS = {
   text: '文字',
   hotspot: '隱形點擊區',
   lock: '答案鎖',
+  socket: '插座',
+  device: '裝置',
+}
+
+// A device always starts with two states (off / on), like a lamp or a cabinet door.
+export function newDeviceStates() {
+  return [
+    { id: genId('ds'), name: '關', icon: '⚪', assetId: null },
+    { id: genId('ds'), name: '開', icon: '💡', assetId: null },
+  ]
 }
 
 export function genId(prefix) {
@@ -65,6 +75,11 @@ export function createStage(title = '第一關') {
 }
 
 // Default size and content of each new object.
+export function deviceDefaults() {
+  const states = newDeviceStates()
+  return { w: 200, h: 200, states, initialState: states[0].id, clickToCycle: true, operateWhen: null, operateMessage: '', onState: {} }
+}
+
 export function createObject(type, extra = {}) {
   const base = {
     id: genId('ob'),
@@ -86,12 +101,38 @@ export function createObject(type, extra = {}) {
     text: { html: '<p>點兩下右側面板編輯文字</p>', fontSize: 32, color: '#ffffff', align: 'left', background: '', w: 500, h: 160 },
     hotspot: { w: 200, h: 200 },
     lock: { ...lockDefaults(), name: '答案鎖', w: 120, h: 120 },
+    // a place where an item is put to make something happen (a keyhole, a safe, a test-tube rack)
+    socket: { w: 160, h: 160, appearance: 'icon', icon: '🔌', accepts: [], consumeItem: true, onMatch: [], onWrongItem: [], hints: [''] },
+    // something with states (a lamp, a fume hood, a cabinet door)
+    device: deviceDefaults(),
   }
   return { ...base, ...byType[type], ...extra }
 }
 
 // Fills in anything missing so older / hand-imported drafts never crash the editor.
 // Works on a copy; the first stage holds the scenes (the stage map arrives in a later phase).
+// Sockets and devices from older / damaged data: fill the missing fields so the rest of the system can rely on them.
+function repairSocket(o) {
+  const base = createObject('socket')
+  const list = (v, fallback) => (Array.isArray(v) ? v : fallback)
+  return { ...base, ...o, accepts: list(o.accepts, []).filter((x) => typeof x === 'string'), onMatch: list(o.onMatch, []), onWrongItem: list(o.onWrongItem, []), hints: list(o.hints, ['']) }
+}
+
+function repairDevice(o) {
+  const base = deviceDefaults()
+  let states = (Array.isArray(o.states) ? o.states : []).filter((s) => s && typeof s === 'object')
+  if (states.length === 0) states = base.states
+  const seen = new Set()
+  states = states.map((s) => {
+    const id = typeof s.id === 'string' && s.id && !seen.has(s.id) ? s.id : genId('ds')
+    seen.add(id)
+    return { name: '', icon: '⚪', assetId: null, ...s, id }
+  })
+  const initialState = states.some((s) => s.id === o.initialState) ? o.initialState : states[0].id
+  const onState = o.onState && typeof o.onState === 'object' && !Array.isArray(o.onState) ? o.onState : {}
+  return { ...base, ...o, states, initialState, onState, operateWhen: o.operateWhen && typeof o.operateWhen === 'object' ? o.operateWhen : null }
+}
+
 // entries of a list that are not objects (null, numbers, text from a damaged file) are dropped
 const onlyObjects = (list) => (Array.isArray(list) ? list.filter((x) => x && typeof x === 'object' && !Array.isArray(x)) : [])
 
@@ -101,6 +142,8 @@ export function normalizeDraft(raw) {
   data.settings = { ...base.settings, ...(data.settings ?? {}) }
   data.stages = onlyObjects(data.stages).length > 0 ? onlyObjects(data.stages) : [createStage()]
   data.stageLinks = onlyObjects(data.stageLinks)
+  data.items = onlyObjects(data.items).map((it) => ({ name: '', icon: '📦', assetId: null, description: '', ...it }))
+  data.combinations = onlyObjects(data.combinations)
   data.stages = data.stages.map((stage, si) => ({
     ...createStage(stage.title),
     graphPos: { x: si * 300, y: 0 },
@@ -114,17 +157,20 @@ export function normalizeDraft(raw) {
       groups: onlyObjects(scene.groups),
       objects: onlyObjects(scene.objects).map((o) => {
         const object = { visible: true, locked: false, opacity: 1, rotation: 0, ...o }
+        if (object.type === 'socket') return repairSocket(object)
+        if (object.type === 'device') return repairDevice(object)
         return object.type === 'lock' ? repairLock(object) : object
       }),
     })),
   }))
   // two stages / scenes / objects / goals with the same id would mix up their pick lists and events: later copies get a fresh id
-  const seen = { st: new Set(), sc: new Set(), ob: new Set(), og: new Set(), gr: new Set() }
+  const seen = { st: new Set(), sc: new Set(), ob: new Set(), og: new Set(), gr: new Set(), it: new Set() }
   const unique = (kind, id) => {
     const next = typeof id === 'string' && id && !seen[kind].has(id) ? id : genId(kind)
     seen[kind].add(next)
     return next
   }
+  for (const item of data.items) item.itemId = unique('it', item.itemId)
   for (const stage of data.stages) {
     stage.stageId = unique('st', stage.stageId)
     for (const o of stage.objectives) o.objectiveId = unique('og', o.objectiveId)

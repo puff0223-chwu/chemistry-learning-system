@@ -148,10 +148,10 @@ await test('protected lock holds no readable answer, and the explanation decrypt
   assert.ok(!JSON.stringify(num).includes('7.25'))
 })
 await test('protectMission protects every lock and leaves the draft untouched', async () => {
-  const data = { stages: [{ scenes: [{ objects: [{ id: 'x', type: 'icon' }, mk('text', { accepted: ['abc'], options: { ...L.TEXT_OPTIONS_DEFAULT } })] }] }] }
+  const data = { stages: [{ scenes: [{ objects: [{ id: 'x', type: 'icon' }, mk('text', { accepted: ['zebra-secret'], options: { ...L.TEXT_OPTIONS_DEFAULT } })] }] }] }
   const out = await L.protectMission(data)
-  assert.ok(!JSON.stringify(out).includes('abc'))
-  assert.equal(data.stages[0].scenes[0].objects[1].answer.accepted[0], 'abc')
+  assert.ok(!JSON.stringify(out).includes('zebra-secret'))
+  assert.equal(data.stages[0].scenes[0].objects[1].answer.accepted[0], 'zebra-secret')
   assert.equal(out.stages[0].scenes[0].objects[0].type, 'icon')
 })
 await test('wrong-answer feedback and logging summaries', () => {

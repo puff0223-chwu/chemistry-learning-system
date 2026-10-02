@@ -33,6 +33,9 @@ export function build(seed) {
   const objectiveIds = ['ghost_goal']
   const flags = ['記號A', '記號B', '', '  ', '記號 with space']
   const lockIds = []
+  const items = Array.from({ length: between(0, 4) }, (_, i) => ({ itemId: `it${i}`, name: text(), icon: '📦', assetId: pick([null, 'ghost_asset']), description: text() }))
+  const itemIds = [...items.map((it) => it.itemId), 'ghost_item']
+  const stateIds = ['on', 'off', 'ghost_state']
 
   for (let i = 0; i < stageCount; i++) {
     const stage = createStage(text())
@@ -45,7 +48,7 @@ export function build(seed) {
       sceneIds.push(sc.sceneId)
       const objCount = between(0, 6)
       for (let o = 0; o < objCount; o++) {
-        const type = pick(['image', 'video', 'icon', 'text', 'hotspot', 'lock', 'lock'])
+        const type = pick(['image', 'video', 'icon', 'text', 'hotspot', 'lock', 'lock', 'socket', 'device'])
         const obj = createObject(type)
         obj.id = `${sc.sceneId}_o${o}`
         obj.name = text()
@@ -64,6 +67,21 @@ export function build(seed) {
           if (chance(0.3)) obj.hints = [text(), '', text()]
           if (chance(0.2)) obj.answer = chance(0.5) ? {} : null // corrupt answer
         }
+        if (type === 'socket') {
+          obj.accepts = chance(0.8) ? [pick(itemIds), pick(itemIds)] : chance(0.5) ? 'oops' : null
+          obj.hints = chance(0.5) ? [text(), '', text()] : null
+          obj.consumeItem = chance(0.5)
+        }
+        if (type === 'device') {
+          if (chance(0.3)) obj.states = chance(0.5) ? [] : [null, { id: 'on', name: text() }, { id: 'on', name: text() }]
+          if (chance(0.3)) obj.initialState = pick(stateIds)
+          obj.clickToCycle = chance(0.7)
+        }
+        if (chance(0.15)) {
+          obj.collectible = true
+          obj.itemId = pick(itemIds)
+        }
+        if (chance(0.05)) obj.collectible = true // picked up, but no item chosen
         sc.objects.push(obj)
       }
       sc.groups = [{ id: 'g1', name: text() }]
@@ -90,7 +108,9 @@ export function build(seed) {
     if (chance(0.3)) c.notFlags = [pick(flags)]
     if (chance(0.3)) c.objectivesDone = [pick(objectiveIds), '']
     if (chance(0.2)) c.elapsedSecondsAtLeast = pick([0, 1, 999999, -5, 'x'])
-    if (chance(0.1)) c.hasItems = ['item1']
+    if (chance(0.2)) c.hasItems = [pick(itemIds), '']
+    if (chance(0.15)) c.notHasItems = [pick(itemIds)]
+    if (chance(0.2)) c.deviceStates = [{ target: pick(objectIds), state: pick(stateIds) }, { target: '', state: '' }, null]
     if (chance(0.25)) c.visitedScenes = [pick(sceneIds), '']
     if (chance(0.15)) c.notVisitedScenes = [pick(sceneIds)]
     if (chance(0.25)) c.clickedObjects = [pick(objectIds)]
@@ -111,7 +131,8 @@ export function build(seed) {
       flag: pick(flags),
       assetId: pick([null, 'ghost_asset']),
       objectiveId: pick(objectiveIds),
-      itemId: 'item1',
+      itemId: pick(itemIds),
+      state: pick(stateIds),
       entryText: text(),
       ms: pick([0, 1, 3, -1, "x"]),
       transition: pick(['', 'left', 'forward', 'nonsense']),
@@ -147,6 +168,19 @@ export function build(seed) {
     to: pick(stages.map((s) => s.stageId).concat('ghost_stage')),
     ...(chance(0.4) ? { when: cond() } : {}),
   }))
-  return { ...emptyMissionData(), stages, stageLinks, settings: { ...emptyMissionData().settings, hideLockedStages: chance(0.5), autoNextStage: chance(0.5) } }
+  const combinations = Array.from({ length: between(0, 3) }, (_, i) => ({ id: `cb${i}`, a: pick(itemIds), b: pick(itemIds), result: pick(itemIds), message: text() }))
+  // device events: what happens when a device enters a state
+  for (const st of stages) for (const sc of st.scenes) for (const o of sc.objects) {
+    if (o.type === 'socket') {
+      o.onMatch = actions()
+      o.onWrongItem = actions()
+    }
+    if (o.type === 'device') {
+      o.onState = { on: actions(), off: actions(), ghost_state: actions() }
+      if (chance(0.3)) o.operateWhen = cond()
+      o.operateMessage = text()
+    }
+  }
+  return { ...emptyMissionData(), items, combinations, stages, stageLinks, settings: { ...emptyMissionData().settings, hideLockedStages: chance(0.5), autoNextStage: chance(0.5) } }
 }
 
