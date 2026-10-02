@@ -27,6 +27,34 @@
 - 左右面板目前是「可收合」，如果想要更彈性（例如浮動的工具列、可拖曳的視窗），可再討論；現階段先用收合＋素材庫彈窗解決空間與捲動問題。
 - 「物品」類條件（撿到道具）：物品系統還沒有完整介面，等物品功能完成後再加進同一個選單。
 
+## 2026-10-03 第 7 階段「物件互動」（進行中，分支 `phase-7-objects`）
+
+> 進行中的工作筆記：設計決定與進度清單。若對話中斷，請依清單接著做。完成後會改寫成正式完成紀錄。
+
+### 開工盤點（與現有功能的相容性）
+- 引擎已有：`add_item`／`remove_item` 動作、`state.items`、條件 `hasItems`、`item_collect` 紀錄。**沒有任何編輯介面**；`set_state` 目前被標成「延後」。
+- 沒有：物品清單、證物袋畫面、可撿起／可拖開的物件設定、插座、裝置、物品組合與檢視。
+- 結論：沒有衝突，都是在現有架構上加東西；舊任務與舊存檔不受影響（新欄位都有預設值、舊存檔缺欄位可讀）。
+
+### 設計決定（資料格式）
+- 任務層級：`items: [{ itemId, name, icon（表情符號）, assetId（可選圖片）, description }]`；`combinations: [{ id, a, b, result, message }]`（A＋B 合成 result，A、B 都消耗）；`settings.showBag`（顯示證物袋，預設 true）。
+- 物件新增欄位（image／icon／text／hotspot 都適用）：`collectible`（可撿起）＋`itemId`、`moveInScene`（可在場景內拖開，用來翻找；位置不存檔）。
+- 新物件類型：
+  - `socket`（插座）：`accepts: [itemId]`、`consumeItem`、`appearance: 'invisible'|'icon'`、`icon`、`onMatch`、`onWrongItem`、`hints`。
+  - `device`（裝置）：`states: [{ id, name, icon, assetId }]`、`initialState`、`clickToCycle`、`operateWhen`（條件）、`operateMessage`、`onState: { 狀態id: [動作] }`。
+- 新動作：`add_item`、`remove_item`、`set_state`（`target`＝裝置、`state`）的編輯表單。
+- 新條件：`hasItems`／`notHasItems`（證物袋有／沒有某物品）、`deviceStates: [{ target, state }]`（某裝置處於某狀態）。
+- 引擎狀態：`devices { 裝置id: 狀態id }`、`socketsDone { 插座id: true }`；紀錄：`item_collect`、`socket_match`、`socket_wrong`、`device_state`、`item_combine`。
+- 學生端：🎒 證物袋（常駐按鈕＋抽屜）：點選物品＝拿在手上，再點插座／另一個物品；也可拖曳（滑鼠與觸控共用指標事件）；🔍 檢視（放大看說明）；組合。可撿起的物件：點一下收進證物袋並從場景消失。
+
+### 進度清單（做完一項打勾）
+- [ ] A. 資料與引擎：物品、組合、插座、裝置、新動作與條件、紀錄、發布檢查、亂數測試資料（含測試）
+- [ ] B. 編輯器：🎒 物品清單視窗、物件「撿起／可拖開」設定、插座與裝置的屬性面板、事件與條件的新表單
+- [ ] C. 學生端：證物袋畫面、撿起、拖開翻找、插座、裝置、物品組合與檢視
+- [ ] D. 全面崩潰掃描（亂數＋畫面＋猴子）、老師視角檢查、文件與經驗庫、提交
+
+---
+
 ## 2026-10-02 第 6 階段後的「全面崩潰掃描」（老師實測通過，已合併 main；無新的 SQL）
 
 老師要求：程式員測試要從各種角度試著弄壞系統，盡量把「要實測才會發現」的問題先找出來。第 6 階段結束時做了一次全面掃描。
