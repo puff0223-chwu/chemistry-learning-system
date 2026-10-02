@@ -3,6 +3,7 @@ import { checkMission } from '../lib/missionCheck.js'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import { PanelCrash } from '../components/CrashPage.jsx'
 import ContextMenu from './ContextMenu.jsx'
+import ItemsDialog from './ItemsDialog.jsx'
 import LockWizard from './LockWizard.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import { collectFlags, completionSources, flagUsage } from '../lib/missionEvents.js'
@@ -104,6 +105,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   const [preview, setPreview] = useState(null) // GameEngine while test-playing
   const [leftOpen, setLeftOpen] = usePersistedFlag('editor-left-open', true)
   const [rightOpen, setRightOpen] = usePersistedFlag('editor-right-open', true)
+  const [itemsOpen, setItemsOpen] = useState(false)
   const [menu, setMenu] = useState(null) // right-click menu: { x, y, title, items }
   const [wizardFor, setWizardFor] = useState(null) // id of the lock the 題目精靈 is editing
   const closeMenu = useCallback(() => setMenu(null), [])
@@ -250,6 +252,8 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
       // for conditions: places, objects and questions of the WHOLE mission (what the game tracks is mission-wide)
       places: draft.stages.flatMap((st) => st.scenes.map((sc) => ({ id: sc.sceneId, name: sc.name, stageTitle: st.title }))),
       things: draft.stages.flatMap((st) => st.scenes.flatMap((sc) => sc.objects.filter((o) => o.type !== 'lock').map((o) => ({ id: o.id, name: o.name, type: o.type, sceneName: draft.stages.length > 1 ? `${st.title}・${sc.name}` : sc.name })))),
+      items: draft.items.map((it) => ({ id: it.itemId, name: it.name, icon: it.icon })),
+      devices: draft.stages.flatMap((st) => st.scenes.flatMap((sc) => sc.objects.filter((o) => o.type === 'device').map((o) => ({ id: o.id, name: o.name, sceneName: sc.name, states: (o.states ?? []).map((s) => ({ id: s.id, name: s.name, icon: s.icon })) })))),
       locks: draft.stages.flatMap((st) => st.scenes.flatMap((sc) => sc.objects.filter((o) => o.type === 'lock').map((o) => ({ id: o.id, name: o.name, type: o.type, sceneName: draft.stages.length > 1 ? `${st.title}・${sc.name}` : sc.name })))),
       objectives: draft.stages.flatMap((st) => (st.objectives ?? []).map((o) => ({ id: o.objectiveId, text: o.text || '（還沒命名的目標）', stageTitle: st.title }))),
       assets,
@@ -261,7 +265,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
 
   // `at` = where it was right-clicked (logical canvas pixels); without it the object starts in the middle.
   function addObject(type, at) {
-    const size = { icon: [120, 120], text: [500, 160], hotspot: [200, 200], lock: [120, 120] }[type]
+    const size = { icon: [120, 120], text: [500, 160], hotspot: [200, 200], lock: [120, 120], socket: [160, 160], device: [200, 200] }[type]
     const extra = at && size ? { x: Math.round(Math.max(0, Math.min(CANVAS_W - size[0], at.x - size[0] / 2))), y: Math.round(Math.max(0, Math.min(CANVAS_H - size[1], at.y - size[1] / 2))) } : {}
     const id = actions.addObject(type, extra)
     if (type === 'icon' && id) setIconPickerFor(id) // a new icon starts by choosing which one
@@ -315,6 +319,10 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
       return
     }
     if (place.stageId && place.stageId !== stage.stageId) actions.selectStage(place.stageId)
+    if (place.dialog === 'items') {
+      setItemsOpen(true)
+      return
+    }
     if (place.dialog) {
       setStageTab(place.dialog)
       setStageOpen(true)
@@ -402,6 +410,8 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
         { icon: '⭐', label: '在這裡加圖示', onClick: () => addObject('icon', point) },
         { icon: '👆', label: '在這裡加隱形點擊區', onClick: () => addObject('hotspot', point) },
         { icon: '🔐', label: '在這裡加答案鎖（精靈帶你設定）', onClick: () => addObject('lock', point) },
+        { icon: '🔌', label: '在這裡加插座（放物品的地方）', onClick: () => addObject('socket', point) },
+        { icon: '💡', label: '在這裡加裝置（有開關、有狀態）', onClick: () => addObject('device', point) },
         'sep',
         scene.objects.length > 0 && { icon: '▦', label: '全選', onClick: () => actions.selectObjects(scene.objects.map((o) => o.id)) },
         scene.sceneId !== stage.startSceneId && { icon: '★', label: '設為起始場景', onClick: () => actions.setStartScene(scene.sceneId) },
@@ -503,6 +513,9 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           </button>
           <button type="button" onClick={() => setFlagsOpen(true)} title="學生做過的事（記號）一覽，可改名" className="px-2 py-1 rounded hover:bg-white/10 text-sm">
             📌 記號{usage.size ? ` (${usage.size})` : ''}
+          </button>
+          <button type="button" onClick={() => setItemsOpen(true)} title="物品清單：學生可以撿起來放進證物袋的東西，以及物品組合" className="px-2 py-1 rounded hover:bg-white/10 text-sm">
+            🎒 物品{draft.items.length ? ` (${draft.items.length})` : ''}
           </button>
         </div>
         {view === 'canvas' && (
@@ -676,6 +689,22 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           onTitle={actions.setStageTitle}
           onUpdateStage={actions.updateStage}
           onClose={() => setStageOpen(false)}
+        />
+      )}
+
+      {itemsOpen && (
+        <ItemsDialog
+          items={draft.items}
+          combinations={draft.combinations}
+          showBag={draft.settings.showBag}
+          assets={assets}
+          assetMap={assetMap}
+          onItems={actions.setItems}
+          onCombinations={actions.setCombinations}
+          onAddItem={actions.addItem}
+          onDeleteItem={actions.deleteItem}
+          onShowBag={(v) => actions.updateSettings({ showBag: v })}
+          onClose={() => setItemsOpen(false)}
         />
       )}
 

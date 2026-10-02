@@ -384,6 +384,21 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
     },
     updateLink: (id, patch, opts) => commit({ ...draftRef.current, stageLinks: draftRef.current.stageLinks.map((l) => (l.id === id ? { ...l, ...patch } : l)) }, opts),
     removeLink: (id) => commit({ ...draftRef.current, stageLinks: draftRef.current.stageLinks.filter((l) => l.id !== id) }, { important: true }),
+    // ---- items (the mission-wide list of things a student can pick up) ----
+    setItems: (items, opts) => commit({ ...draftRef.current, items }, opts ?? { important: true }),
+    setCombinations: (combinations, opts) => commit({ ...draftRef.current, combinations }, opts ?? { important: true }),
+    // A new item; returns its id so the caller can pick it right away.
+    addItem: (name) => {
+      const d = draftRef.current
+      const id = genId('it')
+      commit({ ...d, items: [...d.items, { itemId: id, name: name ?? `物品 ${d.items.length + 1}`, icon: '📦', assetId: null, description: '' }] }, { important: true })
+      return id
+    },
+    // Deleting an item also drops the combinations that used it; objects and events that still point at it are caught by the health check.
+    deleteItem: (id) => {
+      const d = draftRef.current
+      commit({ ...d, items: d.items.filter((it) => it.itemId !== id), combinations: d.combinations.filter((c) => c.a !== id && c.b !== id && c.result !== id) }, { important: true })
+    },
     updateSettings: (patch) => commit({ ...draftRef.current, settings: { ...draftRef.current.settings, ...patch } }, { important: true }),
 
     // Renames a progress marker everywhere it is remembered or checked.

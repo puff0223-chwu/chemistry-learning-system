@@ -11,6 +11,8 @@ const PALETTE = [
   { type: 'icon', icon: '⭐' },
   { type: 'hotspot', icon: '🎯' },
   { type: 'lock', icon: '🔐' },
+  { type: 'socket', icon: '🔌' },
+  { type: 'device', icon: '💡' },
 ]
 
 function SceneThumb({ scene, assets }) {
@@ -67,7 +69,7 @@ export default function LeftPanel({ scenes, sceneId, startSceneId, assets, asset
 
       <section className="p-3 border-b border-slate-200 flex flex-col gap-2 shrink-0">
         <h2 className="font-bold text-sm">加入物件</h2>
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           {PALETTE.map((p) => (
             <button
               key={p.type}

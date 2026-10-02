@@ -334,6 +334,14 @@ export function describeAction(a, ctx) {
       return '播放音效'
     case 'open_lock':
       return `出題「${object(a.target)}」`
+    case 'add_item':
+      return `放進證物袋${quote(ctx.items?.find((i) => i.id === a.itemId)?.name ?? '？')}`
+    case 'remove_item':
+      return `從證物袋拿走${quote(ctx.items?.find((i) => i.id === a.itemId)?.name ?? '？')}`
+    case 'set_state': {
+      const dev = ctx.devices?.find((d) => d.id === a.target)
+      return `把${quote(dev?.name ?? '？')}變成${quote(dev?.states?.find((s) => s.id === a.state)?.name ?? '？')}`
+    }
     case 'complete_objective':
       return `完成目標${quote(ctx.objectives?.find((o) => o.id === a.objectiveId)?.text ?? '？')}`
     case 'delay':

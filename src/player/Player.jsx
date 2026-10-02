@@ -5,6 +5,7 @@ import SceneView from '../editor/SceneView.jsx'
 import { assetUrl } from '../lib/assets.js'
 import { collectFlags, usesElapsedTime } from '../lib/missionEvents.js'
 import { CANVAS_H, CANVAS_W, DIRECTIONS } from '../lib/missionSchema.js'
+import { BagDrawer, ItemViewDialog, Toasts } from './BagUi.jsx'
 import LockDialog from './LockDialog.jsx'
 import { ObjectivesBar, StageMapScreen } from './StageUi.jsx'
 
@@ -82,6 +83,7 @@ function ExitButton({ direction, onClick, toolsOpen }) {
 }
 
 function DebugPanel({ engine, state, scenes, flags, onClose }) {
+  const devices = [...engine.objects.values()].map((x) => x.object).filter((o) => o.type === 'device')
   return (
     <div className="absolute top-14 right-3 z-40 w-64 max-h-[80%] overflow-y-auto bg-white text-navy rounded-xl shadow-xl p-3 flex flex-col gap-3 text-sm">
       <div className="flex items-center justify-between">
@@ -110,6 +112,34 @@ function DebugPanel({ engine, state, scenes, flags, onClose }) {
           </label>
         ))}
       </div>
+      {(engine.mission.items ?? []).length > 0 && (
+        <div>
+          <p className="text-xs text-slate-500 mb-1">證物袋（勾選＝手上有這個物品）</p>
+          {engine.mission.items.map((it) => (
+            <label key={it.itemId} className="flex items-center gap-2 py-0.5">
+              <input type="checkbox" checked={state.items.includes(it.itemId)} onChange={(e) => (e.target.checked ? engine.addItem(it.itemId) : engine.removeItem(it.itemId))} />
+              {it.icon} {it.name}
+            </label>
+          ))}
+        </div>
+      )}
+      {devices.length > 0 && (
+        <div>
+          <p className="text-xs text-slate-500 mb-1">裝置的狀態（會觸發它的事件）</p>
+          {devices.map((d) => (
+            <label key={d.id} className="flex items-center gap-2 py-0.5">
+              <span className="flex-1 truncate">{d.name}</span>
+              <select value={state.devices?.[d.id] ?? ''} onChange={(e) => engine.setDeviceState(d.id, e.target.value)} className="bg-white border border-slate-300 rounded-lg px-1 py-0.5">
+                {(d.states ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+      )}
       <button type="button" onClick={() => engine.restart()} className="bg-slate-100 hover:bg-slate-200 rounded-lg py-1.5">
         ↺ 從頭重新開始（清除旗標）
       </button>
@@ -138,6 +168,11 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   const [confirmExit, setConfirmExit] = useState(false)
   const [lockOpen, setLockOpen] = useState(null) // { id, resolve } while a lock's dialog is showing
   const [debugOpen, setDebugOpen] = useState(mode === 'preview')
+  const [toasts, setToasts] = useState([]) // short auto-fading messages
+  const [bagOpen, setBagOpen] = useState(false)
+  const [held, setHeld] = useState(null) // id of the item in the student's hand
+  const [viewItem, setViewItem] = useState(null)
+  const [moved, setMoved] = useState({ sceneId: null, map: {} }) // objects the student dragged aside in this scene (not saved)
 
   const onMap = !scene && engine.multiStage // standing at the stage map
   const flags = useMemo(() => (mode === 'preview' ? collectFlags(engine.mission) : []), [mode, engine])
@@ -165,6 +200,11 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
     engine.ui = {
       message: (text) => new Promise((resolve) => setMessages((list) => [...list, { text, resolve }])),
       intro: (st) => new Promise((resolve) => setIntro({ stage: st, resolve })),
+      toast: (text) => {
+        const id = Math.random()
+        setToasts((list) => [...list.slice(-2), { id, text }])
+        setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 2600)
+      },
       lock: (id) => new Promise((resolve) => setLockOpen({ id, resolve })),
       closeLock: () =>
         setLockOpen((cur) => {
@@ -219,7 +259,52 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
     return () => window.removeEventListener('keydown', onKey)
   }, [messages.length, dismissMessage])
 
-  const blocked = messages.length > 0 || !!intro || state.missionDone || !!lockOpen
+  const blocked = messages.length > 0 || !!intro || state.missionDone || !!lockOpen || !!viewItem
+  const bag = engine.bag()
+  const showBag = !onMap && engine.mission.settings?.showBag !== false && (engine.mission.items ?? []).length > 0
+  // an item that left the bag (put into a socket, combined) can no longer be "in hand"
+  const heldNow = held && state.items.includes(held) ? held : null
+
+  // Everything the student can do to an object in the scene: tap it, or (with an item in hand) put the item into a socket.
+  const latestInput = useRef(null)
+  useEffect(() => {
+    latestInput.current = { blocked, scale, heldNow, sceneId: scene?.sceneId ?? null }
+  })
+  function handleObjectClick(o) {
+    const now = latestInput.current
+    if (now.blocked) return
+    if (o.type === 'socket' && now.heldNow) {
+      setHeld(null)
+      engine.useItemOnSocket(o.id, now.heldNow)
+      return
+    }
+    engine.clickObject(o)
+  }
+  // Dragging an object aside ("翻找"); a press that hardly moves counts as a tap.
+  function handleObjectPointerDown(e, o) {
+    if (latestInput.current.blocked || e.button > 0) return
+    e.preventDefault()
+    const sceneId = latestInput.current.sceneId
+    const start = { x: e.clientX, y: e.clientY, base: (moved.sceneId === sceneId ? moved.map[o.id] : null) ?? { dx: 0, dy: 0 }, away: false }
+    const move = (ev) => {
+      const dx = ev.clientX - start.x
+      const dy = ev.clientY - start.y
+      if (!start.away && Math.hypot(dx, dy) > 6) start.away = true
+      if (!start.away) return
+      const k = latestInput.current.scale || 1
+      setMoved((cur) => ({ sceneId, map: { ...(cur.sceneId === sceneId ? cur.map : {}), [o.id]: { dx: start.base.dx + dx / k, dy: start.base.dy + dy / k } } }))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      if (!start.away) handleObjectClick(o)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+  const offsets = moved.sceneId === (scene?.sceneId ?? null) ? moved.map : {}
 
   if (!scene && !onMap) {
     return (
@@ -238,7 +323,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   const screenColor = onMap ? '#0f172a' : sceneBackground?.type === 'color' ? sceneBackground.color : '#000'
 
   const seconds = engine.elapsedSeconds()
-  const sceneProps = { assets, interactive: true, isVisible: engine.isVisible, isSolved: (id) => engine.lockState(id).solved, onObjectClick: (o) => !blocked && engine.clickObject(o) }
+  const sceneProps = { assets, interactive: true, isVisible: engine.isVisible, isSolved: (id) => engine.lockState(id).solved, deviceStateOf: (o) => state.devices?.[o.id], offsets, onObjectClick: handleObjectClick, onObjectPointerDown: handleObjectPointerDown }
 
   return (
     <div className="fixed inset-0 overflow-hidden select-none z-40" style={{ touchAction: 'manipulation', background: screenColor }}>
@@ -278,6 +363,10 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
 
       {!onMap && <ObjectivesBar engine={engine} />}
 
+      <Toasts items={toasts} />
+      {showBag && bagOpen && <BagDrawer engine={engine} bag={bag} assets={assets} held={heldNow} setHeld={setHeld} onView={setViewItem} onClose={() => setBagOpen(false)} blocked={blocked} />}
+      {viewItem && <ItemViewDialog item={viewItem} assets={assets} onClose={() => setViewItem(null)} />}
+
       <div className="absolute top-3 left-3 right-3 z-30 flex items-center gap-2 pointer-events-none">
         <button type="button" onClick={() => setConfirmExit(true)} className="pointer-events-auto bg-black/50 hover:bg-black/70 text-white rounded-full px-4 py-2 text-sm">
           ← {mode === 'preview' ? '結束試玩' : '離開'}
@@ -295,6 +384,11 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
         <span className="text-white/70 text-sm tabular-nums drop-shadow">
           {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
         </span>
+        {showBag && (
+          <button type="button" onClick={() => setBagOpen((o) => !o)} className={`pointer-events-auto rounded-full px-4 h-10 text-sm text-white ${bagOpen ? 'bg-cyan' : 'bg-black/50 hover:bg-black/70'}`}>
+            🎒 證物袋{bag.length ? `（${bag.length}）` : ''}
+          </button>
+        )}
         <button type="button" onClick={() => setMuted((m) => !m)} aria-label={muted ? '開啟聲音' : '靜音'} className="pointer-events-auto bg-black/50 hover:bg-black/70 text-white rounded-full w-10 h-10">
           {muted ? '🔇' : '🔊'}
         </button>

@@ -2,8 +2,9 @@ import { useState } from 'react'
 import RichTextEditor from '../components/RichTextEditor.jsx'
 import { DIRECTIONS, OBJECT_TYPE_LABELS, parseYouTubeId } from '../lib/missionSchema.js'
 import AssetPicker from './AssetPicker.jsx'
-import { ConditionEditor, EventEditor } from './EventEditor.jsx'
+import { ConditionEditor, EventEditor, ItemSelect } from './EventEditor.jsx'
 import LayersPanel, { SelectionPanel, interactionBadges } from './LayersPanel.jsx'
+import { DeviceProperties, SocketProperties } from './KindProperties.jsx'
 import LockProperties from './LockEditor.jsx'
 import VisibilityBlock from './VisibilityBlock.jsx'
 
@@ -164,12 +165,45 @@ function LookTab({ object, assets, assetMap, onUpdate, onPickIcon }) {
 
 // ---------------------------------------------------------------- object: 互動 tab
 
-function InteractTab({ object, ctx, onUpdate }) {
+// "Can the student pick it up / drag it away?" — the two switches every ordinary object has (spec-v5 §8.1).
+function AbilitiesBlock({ object, ctx, onUpdate, onAddItem }) {
+  return (
+    <section className="flex flex-col gap-2 border-t border-slate-200 pt-3">
+      <h3 className="font-bold text-sm">🎒 這個東西可以被…</h3>
+      <label className={`flex gap-2 rounded-lg border p-2 cursor-pointer ${object.collectible ? 'border-cyan bg-cyan/5' : 'border-slate-200 hover:bg-slate-50'}`}>
+        <input type="checkbox" checked={!!object.collectible} onChange={(e) => onUpdate(object.id, { collectible: e.target.checked }, { important: true })} className="mt-1" />
+        <span className="text-sm">
+          <b>撿起來，放進證物袋</b>
+          <span className="block text-xs text-slate-500">學生點一下，它就變成證物袋裡的一個物品，並從場景消失。</span>
+        </span>
+      </label>
+      {object.collectible && (
+        <div className="flex flex-col gap-1.5 pl-1">
+          <span className="text-xs text-slate-500">撿起後得到的是哪個物品？（必填）</span>
+          <ItemSelect items={ctx.items ?? []} value={object.itemId} onChange={(v) => onUpdate(object.id, { itemId: v }, { important: true })} />
+          <button type="button" onClick={() => onUpdate(object.id, { itemId: onAddItem(object.name) }, { important: true })} className="self-start text-sm bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1">
+            ＋ 新增一個物品（名字先用「{object.name}」）
+          </button>
+        </div>
+      )}
+      <label className={`flex gap-2 rounded-lg border p-2 cursor-pointer ${object.moveInScene ? 'border-cyan bg-cyan/5' : 'border-slate-200 hover:bg-slate-50'}`}>
+        <input type="checkbox" checked={!!object.moveInScene} onChange={(e) => onUpdate(object.id, { moveInScene: e.target.checked }, { important: true })} className="mt-1" />
+        <span className="text-sm">
+          <b>在場景裡拖開（翻找）</b>
+          <span className="block text-xs text-slate-500">學生可以把它拖到別的地方，看到底下藏的東西。離開場景後會回到原位。</span>
+        </span>
+      </label>
+    </section>
+  )
+}
+
+function InteractTab({ object, ctx, onUpdate, onAddItem }) {
   const objectCtx = { ...ctx, selfId: object.id, selfName: object.name }
 
   return (
     <div className="flex flex-col gap-4">
       <VisibilityBlock object={object} ctx={ctx} onUpdate={onUpdate} />
+      <AbilitiesBlock object={object} ctx={ctx} onUpdate={onUpdate} onAddItem={onAddItem} />
 
       <section className="flex flex-col gap-2 border-t border-slate-200 pt-3">
         <h3 className="font-bold text-sm">🖱️ 學生點它的時候，會發生什麼事？</h3>
@@ -195,8 +229,10 @@ function GroupNote({ group, object, onUpdate, onSelectGroup }) {
   )
 }
 
-function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPickIcon, onPreviewLock, onWizardLock, onSelectGroup }) {
+function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPickIcon, onPreviewLock, onWizardLock, onSelectGroup, onAddItem }) {
   const [tab, setTab] = useState(object.type === 'hotspot' ? 'interact' : 'look')
+  if (object.type === 'socket') return <SocketProperties object={object} ctx={ctx} onUpdate={onUpdate} onAddItem={onAddItem} />
+  if (object.type === 'device') return <DeviceProperties object={object} ctx={ctx} assets={assets} assetMap={assetMap} onUpdate={onUpdate} />
   if (object.type === 'lock') {
     return (
       <LockProperties
@@ -225,7 +261,7 @@ function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPi
         value={tab}
         onChange={setTab}
       />
-      {tab === 'look' ? <LookTab object={object} assets={assets} assetMap={assetMap} onUpdate={onUpdate} onPickIcon={onPickIcon} /> : <InteractTab object={object} ctx={ctx} onUpdate={onUpdate} />}
+      {tab === 'look' ? <LookTab object={object} assets={assets} assetMap={assetMap} onUpdate={onUpdate} onPickIcon={onPickIcon} /> : <InteractTab object={object} ctx={ctx} onUpdate={onUpdate} onAddItem={onAddItem} />}
     </div>
   )
 }
@@ -437,7 +473,7 @@ export default function RightPanel({ scene, scenes, stage, object, objectIds, as
         {objectIds.length > 1 ? (
           <SelectionPanel scene={scene} selectedIds={objectIds} actions={actions} />
         ) : object ? (
-          <ObjectProperties key={object.id} object={object} group={group} onSelectGroup={() => actions.selectObject(object.id)} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} onPickIcon={onPickIcon} onPreviewLock={onPreviewLock} onWizardLock={actions.openWizard} />
+          <ObjectProperties key={object.id} object={object} group={group} onSelectGroup={() => actions.selectObject(object.id)} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} onPickIcon={onPickIcon} onPreviewLock={onPreviewLock} onWizardLock={actions.openWizard} onAddItem={actions.addItem} />
         ) : (
           <SceneProperties
             key={scene.sceneId}

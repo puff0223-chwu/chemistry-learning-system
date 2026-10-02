@@ -3,7 +3,7 @@ import { OBJECT_TYPE_LABELS } from '../lib/missionSchema.js'
 import { membersOf, wholeGroupSelected } from './groupOps.js'
 
 // What an object can do, as little icons: ⚡ reacts to clicks, ⏳ not always visible.
-export const interactionBadges = (o) => `${o.onClick?.length ? '⚡' : ''}${o.showWhen || o.visible === false ? '⏳' : ''}`
+export const interactionBadges = (o) => `${o.onClick?.length ? '⚡' : ''}${o.showWhen || o.visible === false ? '⏳' : ''}${o.collectible ? '🎒' : ''}${o.moveInScene ? '✋' : ''}`
 
 const iconButton = 'px-1 hover:bg-slate-200 rounded'
 
@@ -40,7 +40,7 @@ function ObjectRow({ o, indent, selectedIds, actions }) {
       <button type="button" onClick={(e) => actions.selectObject(o.id, { single: true, additive: e.shiftKey || e.ctrlKey || e.metaKey })} className="flex-1 min-w-0 text-left truncate">
         {o.name}
         <span className="text-[11px] text-slate-400"> {OBJECT_TYPE_LABELS[o.type]}</span>
-        <span className="text-[11px]" title="⚡ 點擊有事件　⏳ 有出現條件或一開始隱藏">
+        <span className="text-[11px]" title="⚡ 點擊有事件　⏳ 有出現條件或一開始隱藏　🎒 可以撿起　✋ 可以拖開">
           {' '}
           {interactionBadges(o)}
         </span>

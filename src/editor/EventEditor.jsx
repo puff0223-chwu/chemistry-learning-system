@@ -81,11 +81,15 @@ const FACT_ROWS = [
   { key: 'notClickedObjects', kind: 'thing', icon: '🙅', label: '學生還沒點過這個物件' },
   { key: 'solvedLocks', kind: 'lock', icon: '🔓', label: '學生已經解開這一題' },
   { key: 'notSolvedLocks', kind: 'lock', icon: '🔐', label: '學生還沒解開這一題' },
+  { key: 'hasItems', kind: 'item', icon: '🎒', label: '證物袋裡有這個物品' },
+  { key: 'notHasItems', kind: 'item', icon: '🫙', label: '證物袋裡沒有這個物品' },
 ]
 const ADD_GROUPS = [
   { label: '📍 地點', items: [{ value: 'visitedScenes', label: '去過某個地點' }, { value: 'notVisitedScenes', label: '還沒去過某個地點' }] },
   { label: '👆 物件', items: [{ value: 'clickedObjects', label: '點過某個物件' }, { value: 'notClickedObjects', label: '還沒點過某個物件' }] },
   { label: '🔐 題目', items: [{ value: 'solvedLocks', label: '已經解開某一題' }, { value: 'notSolvedLocks', label: '還沒解開某一題' }] },
+  { label: '🎒 證物袋', items: [{ value: 'hasItems', label: '證物袋裡有某個物品' }, { value: 'notHasItems', label: '證物袋裡沒有某個物品' }] },
+  { label: '💡 裝置', items: [{ value: 'deviceStates', label: '某個裝置處於某個狀態' }] },
   { label: '🎯 任務目標', items: [{ value: 'goal', label: '已完成某個任務目標' }] },
   { label: '📌 自訂進度記號（進階）', items: [{ value: 'has', label: '某個記號已經發生' }, { value: 'not', label: '某個記號還沒發生' }, { value: 'any', label: '幾個記號任選其一發生就算' }] },
   { label: '⏱️ 時間', items: [{ value: 'time', label: '遊戲開始超過幾秒' }] },
@@ -108,6 +112,7 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
   const any = c.anyFlags ?? []
   const goals = c.objectivesDone ?? []
   const hasTime = c.elapsedSecondsAtLeast !== undefined
+  const devices = Array.isArray(c.deviceStates) ? c.deviceStates : []
   const replaceAt = (list, i, v) => list.map((x, j) => (j === i ? v : x))
   const removeAt = (list, i) => list.filter((_, j) => j !== i)
 
@@ -117,10 +122,11 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
     if (kind === 'any') set({ anyFlags: [...any, ''] })
     if (kind === 'goal') set({ objectivesDone: [...goals, ''] })
     if (FACT_ROWS.some((f) => f.key === kind)) set({ [kind]: [...(c[kind] ?? []), ''] })
+    if (kind === 'deviceStates') set({ deviceStates: [...devices, { target: '', state: '' }] })
     if (kind === 'time') set({ elapsedSecondsAtLeast: 60 })
   }
 
-  const rows = all.length + none.length + goals.length + FACT_ROWS.reduce((n, f) => n + (c[f.key] ?? []).length, 0) + (any.length ? 1 : 0) + (hasTime ? 1 : 0)
+  const rows = all.length + none.length + goals.length + FACT_ROWS.reduce((n, f) => n + (c[f.key] ?? []).length, 0) + devices.length + (any.length ? 1 : 0) + (hasTime ? 1 : 0)
   return (
     <div className="flex flex-col gap-2 border border-slate-200 rounded-lg p-2 bg-slate-50">
       {rows === 0 && <p className="text-xs text-slate-500">{emptyHint}</p>}
@@ -131,12 +137,19 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
           <CondRow key={`${f.key}${i}`} icon={f.icon} label={f.label} onRemove={() => set({ [f.key]: removeAt(c[f.key], i) })}>
             {f.kind === 'place' ? (
               <PlaceSelect places={ctx.places ?? ctx.scenes?.map((s) => ({ id: s.sceneId, name: s.name })) ?? []} value={id} onChange={(v) => set({ [f.key]: replaceAt(c[f.key], i, v ?? '') })} />
+            ) : f.kind === 'item' ? (
+              <ItemSelect items={ctx.items ?? []} value={id} onChange={(v) => set({ [f.key]: replaceAt(c[f.key], i, v ?? '') })} />
             ) : (
               <ObjectSelect objects={(f.kind === 'lock' ? ctx.locks : ctx.things) ?? []} placeholder={f.kind === 'lock' ? '（選一道題目…）' : '（選一個物件…）'} value={id} onChange={(v) => set({ [f.key]: replaceAt(c[f.key], i, v ?? '') })} />
             )}
           </CondRow>
         )),
       )}
+      {devices.map((d, i) => (
+        <CondRow key={`d${i}`} icon="💡" label="某個裝置處於某個狀態" onRemove={() => set({ deviceStates: removeAt(devices, i) })}>
+          <DeviceStatePick devices={ctx.devices ?? []} value={d} onChange={(v) => set({ deviceStates: replaceAt(devices, i, v) })} />
+        </CondRow>
+      ))}
       {all.map((f, i) => (
         <CondRow key={`a${i}`} icon="✅" label="學生已經做過" onRemove={() => set({ allFlags: removeAt(all, i) })}>
           <FlagPicker value={f} flags={ctx.flags} onChange={(v) => set({ allFlags: replaceAt(all, i, v) })} />
@@ -212,6 +225,8 @@ const STRIPE = {
   flow: 'border-l-teal-500',
   goal: 'border-l-amber-500',
   lock: 'border-l-rose-500',
+  item: 'border-l-yellow-600',
+  device: 'border-l-indigo-500',
 }
 
 function SceneSelect({ scenes, value, onChange }) {
@@ -257,6 +272,46 @@ function ObjectSelect({ objects, groups: wholeGroups = [], value, onChange, self
         </optgroup>
       ))}
     </select>
+  )
+}
+
+// Pick one of the mission's items.
+export function ItemSelect({ items, value, onChange, placeholder = '（選一個物品…）' }) {
+  return (
+    <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} className={required(value)}>
+      <option value="">{placeholder}</option>
+      {items.map((it) => (
+        <option key={it.id} value={it.id}>
+          {it.icon} {it.name || '（未命名的物品）'}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+// Pick a device and one of its states: the second list follows the first.
+function DeviceStatePick({ devices, value, onChange }) {
+  const dev = devices.find((d) => d.id === value?.target)
+  return (
+    <div className="flex flex-col gap-1.5">
+      <select value={value?.target ?? ''} onChange={(e) => onChange({ target: e.target.value, state: '' })} className={required(value?.target)}>
+        <option value="">（選一個裝置…）</option>
+        {devices.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.name}（{d.sceneName}）
+          </option>
+        ))}
+      </select>
+      <select value={value?.state ?? ''} onChange={(e) => onChange({ target: value?.target ?? '', state: e.target.value })} disabled={!dev} className={required(value?.state)}>
+        <option value="">（選狀態…）</option>
+        {(dev?.states ?? []).map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.icon} {s.name}
+          </option>
+        ))}
+      </select>
+      {devices.length === 0 && <p className="text-xs text-amber-700">還沒有任何裝置。請先用左邊「加入物件」的「💡 裝置」做一個。</p>}
+    </div>
   )
 }
 
@@ -384,6 +439,17 @@ function ActionParams({ action, onChange, ctx, depth }) {
           {(ctx.objectives ?? []).length === 0 && <p className="text-xs text-amber-700">還沒有任何任務目標。請到上方「🏁 關卡設定」→「🎯 任務目標」新增。</p>}
         </>
       )
+    case 'add_item':
+    case 'remove_item':
+      return (
+        <>
+          <ItemSelect items={ctx.items ?? []} value={action.itemId} onChange={(v) => set({ itemId: v })} />
+          {(ctx.items ?? []).length === 0 && <p className="text-xs text-amber-700">還沒有任何物品。請到上方「🎒 物品」新增。</p>}
+          <p className="text-xs text-slate-500">{action.action === 'add_item' ? '學生的證物袋會多一件這個物品。' : '證物袋裡的這個物品會不見。'}</p>
+        </>
+      )
+    case 'set_state':
+      return <DeviceStatePick devices={ctx.devices ?? []} value={{ target: action.target ?? '', state: action.state ?? '' }} onChange={(v) => set({ target: v.target || null, state: v.state || null })} />
     case 'complete_stage':
       return <p className="text-xs text-slate-500">學生會過關，接著執行「關卡設定」裡「過關後」的事。</p>
     case 'if':
