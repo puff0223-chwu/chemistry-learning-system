@@ -72,12 +72,23 @@ function CondRow({ icon, label, onRemove, children }) {
   )
 }
 
-const ADD_CONDITION = [
-  { value: 'has', label: '✅ 學生已經做過某件事' },
-  { value: 'not', label: '🚫 學生還沒做過某件事' },
-  { value: 'any', label: '🔀 下列其中一件事已經發生' },
-  { value: 'goal', label: '🎯 已完成某個任務目標' },
-  { value: 'time', label: '⏱️ 遊戲開始超過幾秒' },
+// What a condition can look at, grouped the way a teacher thinks: places, objects, questions, goals, then the advanced
+// "markers" and time. The game tracks places / objects / questions by itself; markers only exist when an event sets them.
+const FACT_ROWS = [
+  { key: 'visitedScenes', kind: 'place', icon: '📍', label: '學生去過這個地點' },
+  { key: 'notVisitedScenes', kind: 'place', icon: '🚷', label: '學生還沒去過這個地點' },
+  { key: 'clickedObjects', kind: 'thing', icon: '👆', label: '學生點過這個物件' },
+  { key: 'notClickedObjects', kind: 'thing', icon: '🙅', label: '學生還沒點過這個物件' },
+  { key: 'solvedLocks', kind: 'lock', icon: '🔓', label: '學生已經解開這一題' },
+  { key: 'notSolvedLocks', kind: 'lock', icon: '🔐', label: '學生還沒解開這一題' },
+]
+const ADD_GROUPS = [
+  { label: '📍 地點', items: [{ value: 'visitedScenes', label: '去過某個地點' }, { value: 'notVisitedScenes', label: '還沒去過某個地點' }] },
+  { label: '👆 物件', items: [{ value: 'clickedObjects', label: '點過某個物件' }, { value: 'notClickedObjects', label: '還沒點過某個物件' }] },
+  { label: '🔐 題目', items: [{ value: 'solvedLocks', label: '已經解開某一題' }, { value: 'notSolvedLocks', label: '還沒解開某一題' }] },
+  { label: '🎯 任務目標', items: [{ value: 'goal', label: '已完成某個任務目標' }] },
+  { label: '📌 自訂進度記號（進階）', items: [{ value: 'has', label: '某個記號已經發生' }, { value: 'not', label: '某個記號還沒發生' }, { value: 'any', label: '幾個記號任選其一發生就算' }] },
+  { label: '⏱️ 時間', items: [{ value: 'time', label: '遊戲開始超過幾秒' }] },
 ]
 
 // Edits one condition as a short list of rules that must ALL hold (spec-v5 §7.2), with a plain-language summary
@@ -105,15 +116,27 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
     if (kind === 'not') set({ notFlags: [...none, ''] })
     if (kind === 'any') set({ anyFlags: [...any, ''] })
     if (kind === 'goal') set({ objectivesDone: [...goals, ''] })
+    if (FACT_ROWS.some((f) => f.key === kind)) set({ [kind]: [...(c[kind] ?? []), ''] })
     if (kind === 'time') set({ elapsedSecondsAtLeast: 60 })
   }
 
-  const rows = all.length + none.length + goals.length + (any.length ? 1 : 0) + (hasTime ? 1 : 0)
+  const rows = all.length + none.length + goals.length + FACT_ROWS.reduce((n, f) => n + (c[f.key] ?? []).length, 0) + (any.length ? 1 : 0) + (hasTime ? 1 : 0)
   return (
     <div className="flex flex-col gap-2 border border-slate-200 rounded-lg p-2 bg-slate-50">
       {rows === 0 && <p className="text-xs text-slate-500">{emptyHint}</p>}
       {rows > 1 && <p className="text-xs text-slate-500">下面每一項都要符合：</p>}
 
+      {FACT_ROWS.map((f) =>
+        (c[f.key] ?? []).map((id, i) => (
+          <CondRow key={`${f.key}${i}`} icon={f.icon} label={f.label} onRemove={() => set({ [f.key]: removeAt(c[f.key], i) })}>
+            {f.kind === 'place' ? (
+              <PlaceSelect places={ctx.places ?? ctx.scenes?.map((s) => ({ id: s.sceneId, name: s.name })) ?? []} value={id} onChange={(v) => set({ [f.key]: replaceAt(c[f.key], i, v ?? '') })} />
+            ) : (
+              <ObjectSelect objects={(f.kind === 'lock' ? ctx.locks : ctx.things) ?? []} placeholder={f.kind === 'lock' ? '（選一道題目…）' : '（選一個物件…）'} value={id} onChange={(v) => set({ [f.key]: replaceAt(c[f.key], i, v ?? '') })} />
+            )}
+          </CondRow>
+        )),
+      )}
       {all.map((f, i) => (
         <CondRow key={`a${i}`} icon="✅" label="學生已經做過" onRemove={() => set({ allFlags: removeAt(all, i) })}>
           <FlagPicker value={f} flags={ctx.flags} onChange={(v) => set({ allFlags: replaceAt(all, i, v) })} />
@@ -161,10 +184,16 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
         className="bg-white border border-dashed border-cyan/60 hover:bg-cyan/5 rounded-lg px-2 py-1 text-sm text-navy"
       >
         <option value="">＋ 加一個條件…</option>
-        {ADD_CONDITION.filter((o) => !((o.value === 'any' && any.length) || (o.value === 'time' && hasTime))).map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
+        {ADD_GROUPS.map((g) => (
+          <optgroup key={g.label} label={g.label}>
+            {g.items
+              .filter((o) => !((o.value === 'any' && any.length) || (o.value === 'time' && hasTime)))
+              .map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+          </optgroup>
         ))}
       </select>
 
@@ -198,7 +227,7 @@ function SceneSelect({ scenes, value, onChange }) {
   )
 }
 
-function ObjectSelect({ objects, groups: wholeGroups = [], value, onChange, selfId, selfName }) {
+function ObjectSelect({ objects, groups: wholeGroups = [], value, onChange, selfId, selfName, placeholder = '（選一個物件…）' }) {
   const groups = Object.entries(
     objects.reduce((acc, o) => {
       ;(acc[o.sceneName] ??= []).push(o)
@@ -207,7 +236,7 @@ function ObjectSelect({ objects, groups: wholeGroups = [], value, onChange, self
   )
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} className={required(value)}>
-      <option value="">（選一個物件…）</option>
+      <option value="">{placeholder}</option>
       {selfId && <option value={selfId}>⭐ 這個物件自己（{selfName}）</option>}
       {wholeGroups.length > 0 && (
         <optgroup label="🗂 整個群組（一次處理全部）">
@@ -227,6 +256,28 @@ function ObjectSelect({ objects, groups: wholeGroups = [], value, onChange, self
           ))}
         </optgroup>
       ))}
+    </select>
+  )
+}
+
+// Pick a place (scene). With several stages the places are grouped by stage.
+function PlaceSelect({ places, value, onChange }) {
+  const stages = [...new Set(places.map((p) => p.stageTitle).filter(Boolean))]
+  const option = (p) => (
+    <option key={p.id} value={p.id}>
+      {p.name}
+    </option>
+  )
+  return (
+    <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} className={required(value)}>
+      <option value="">（選一個地點…）</option>
+      {stages.length > 1
+        ? stages.map((title) => (
+            <optgroup key={title} label={title}>
+              {places.filter((p) => p.stageTitle === title).map(option)}
+            </optgroup>
+          ))
+        : places.map(option)}
     </select>
   )
 }
@@ -322,7 +373,7 @@ function ActionParams({ action, onChange, ctx, depth }) {
       return (
         <label className="flex items-center gap-2 text-sm">
           等待
-          <input type="number" min={0} step={0.5} value={(action.ms ?? 0) / 1000} onChange={(e) => set({ ms: Math.max(0, Number(e.target.value)) * 1000 })} className={`${inputClass} w-24`} />
+          <input type="number" min={0} step={0.5} value={(Number(action.ms) || 0) / 1000} onChange={(e) => set({ ms: Math.max(0, Number(e.target.value) || 0) * 1000 })} className={`${inputClass} w-24`} />
           秒，再做下一件事
         </label>
       )

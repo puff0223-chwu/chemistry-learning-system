@@ -12,6 +12,8 @@ const freshState = () => ({
   notebook: [],
   objectivesDone: [],
   objectiveHints: {}, // objectiveId -> how many hints were shown
+  visited: {}, // sceneId -> true once the student has been in that scene
+  clicked: {}, // objectId -> true once the student has clicked / opened it
   visibility: {}, // objectId -> true/false, set by reveal_object / hide_object
   locks: {}, // lockId -> { wrong, hints, gaveUp, solved, afterGiveUp }
   backgrounds: {}, // sceneId -> background, set by swap_background
@@ -118,6 +120,9 @@ export default class GameEngine {
       flags: s.flags,
       items: s.items,
       objectivesDone: s.objectivesDone,
+      visited: s.visited,
+      clicked: s.clicked,
+      locks: s.locks,
       notebookCount: s.notebook.length,
       elapsedSeconds: this.elapsedSeconds(),
     }
@@ -235,6 +240,8 @@ export default class GameEngine {
       flags: drop(this.state.flags, (f) => !ownFlags.has(f)),
       objectivesDone: this.state.objectivesDone.filter((id) => !ownObjectives.has(id)),
       objectiveHints: drop(this.state.objectiveHints, (id) => !ownObjectives.has(id)),
+      visited: drop(this.state.visited, (id) => !sceneIds.has(id)),
+      clicked: drop(this.state.clicked, (id) => !objectIds.has(id)),
       lastScene: drop(this.state.lastScene, (id) => id !== stageId),
     })
   }
@@ -296,6 +303,7 @@ export default class GameEngine {
 
   async clickObject(object) {
     if (this.state.missionDone) return
+    this.setState({ clicked: { ...this.state.clicked, [object.id]: true } })
     if (object.type === 'lock') {
       await this.openLock(object.id)
       await this.checkCompletion()
@@ -322,6 +330,7 @@ export default class GameEngine {
     this.transitionSeq += 1
     this.setState({
       sceneId,
+      visited: { ...this.state.visited, [sceneId]: true },
       lastScene: { ...this.state.lastScene, [this.state.stageId]: sceneId },
       transition: animate && from !== sceneId ? { seq: this.transitionSeq, kind: kind ?? 'fade', from } : null,
     })
@@ -336,8 +345,9 @@ export default class GameEngine {
   }
 
   async runActions(list) {
-    for (const a of list ?? []) {
+    for (const a of Array.isArray(list) ? list : []) {
       if (this.destroyed) return
+      if (!a || typeof a !== 'object') continue
       if (isBranch(a)) {
         await this.runActions(this.check(a.if) ? a.then : a.else)
         continue
@@ -430,6 +440,7 @@ export default class GameEngine {
   // The dialog asks what it may offer: more hints? the "我真的不會" button?
   lockOptions(id) {
     const lock = this.lockObject(id)
+    if (!lock) return { canHint: false, canGiveUp: false, hintsTotal: 0 } // not a lock (or deleted since the progress was saved)
     const st = this.lockState(id)
     const total = this.lockHints(lock).length
     return {

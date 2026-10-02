@@ -20,7 +20,8 @@ const EXIT_POSITIONS = {
   backward: 'bottom-24 left-3',
 }
 
-const hasText = (html) => !!html && html.replace(/<[^>]*>/g, '').trim().length > 0
+// the same, while the test-play tool panel (16rem wide, top right) is open
+const EXIT_POSITIONS_TOOLS_OPEN = { right: 'right-[17.5rem] top-1/2 -translate-y-1/2', forward: 'bottom-24 right-[17.5rem]' }
 
 // Extends the scene past its 16:9 frame so wider or taller screens do not show bars. Rendered INSIDE the frame's box
 // and positioned outside it:
@@ -46,15 +47,24 @@ function Backdrop({ background, assets }) {
       {mirror('r', { left: OVERLAP, top: 0 }, 'scaleX(-1)')}
       {mirror('t', { left: 0, bottom: OVERLAP }, 'scaleY(-1)')}
       {mirror('b', { left: 0, top: OVERLAP }, 'scaleY(-1)')}
+      {/* the four corners, mirrored both ways, so no black block shows where the side copies meet the top / bottom ones */}
+      {mirror('tl', { right: OVERLAP, bottom: OVERLAP }, 'scale(-1, -1)')}
+      {mirror('tr', { left: OVERLAP, bottom: OVERLAP }, 'scale(-1, -1)')}
+      {mirror('bl', { right: OVERLAP, top: OVERLAP }, 'scale(-1, -1)')}
+      {mirror('br', { left: OVERLAP, top: OVERLAP }, 'scale(-1, -1)')}
       {shade('sl', { right: OVERLAP, top: 0 }, 'left')}
       {shade('sr', { left: OVERLAP, top: 0 }, 'right')}
       {shade('st', { left: 0, bottom: OVERLAP }, 'top')}
       {shade('sb', { left: 0, top: OVERLAP }, 'bottom')}
+      {shade('s1', { right: OVERLAP, bottom: OVERLAP }, 'top left')}
+      {shade('s2', { left: OVERLAP, bottom: OVERLAP }, 'top right')}
+      {shade('s3', { right: OVERLAP, top: OVERLAP }, 'bottom left')}
+      {shade('s4', { left: OVERLAP, top: OVERLAP }, 'bottom right')}
     </>
   )
 }
 
-function ExitButton({ direction, onClick }) {
+function ExitButton({ direction, onClick, toolsOpen }) {
   const d = DIRECTIONS.find((x) => x.key === direction)
   const pill = direction === 'forward' || direction === 'backward'
   return (
@@ -62,7 +72,7 @@ function ExitButton({ direction, onClick }) {
       type="button"
       onClick={onClick}
       aria-label={`往${d.label}`}
-      className={`absolute z-20 bg-black/50 hover:bg-black/70 active:bg-black/80 text-white backdrop-blur-sm transition-colors ${EXIT_POSITIONS[direction]} ${
+      className={`absolute z-20 bg-black/50 hover:bg-black/70 active:bg-black/80 text-white backdrop-blur-sm transition-colors ${toolsOpen && (direction === 'right' || direction === 'forward') ? EXIT_POSITIONS_TOOLS_OPEN[direction] : EXIT_POSITIONS[direction]} ${
         pill ? 'rounded-full px-5 py-3 text-lg font-bold' : 'w-14 h-14 rounded-full text-2xl'
       }`}
     >
@@ -114,7 +124,9 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
   const scene = engine.scene()
   const stage = engine.stage
 
-  const boxRef = useRef(null)
+  // the element that gets measured; kept in state (a callback ref) so measuring starts the moment it appears on screen,
+  // even when it appears later than this component first rendered
+  const [box, setBox] = useState(null)
   const [scale, setScale] = useState(0.5)
   const [portrait, setPortrait] = useState(false)
   const [rotateHintClosed, setRotateHintClosed] = useState(false)
@@ -136,7 +148,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
 
   // Fit the 1600x900 scene into whatever screen we have.
   useEffect(() => {
-    const el = boxRef.current
+    const el = box
     if (!el) return // not on screen while the stage map is showing
     const measure = () => {
       setScale(Math.min(el.clientWidth / CANVAS_W, el.clientHeight / CANVAS_H))
@@ -146,7 +158,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [onMap])
+  }, [box])
 
   // The engine asks the UI to show messages and play sounds.
   useEffect(() => {
@@ -232,7 +244,7 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
     <div className="fixed inset-0 overflow-hidden select-none z-40" style={{ touchAction: 'manipulation', background: screenColor }}>
       {onMap && <StageMapScreen engine={engine} state={state} />}
       {!onMap && (
-      <div ref={boxRef} className="absolute inset-0 flex items-center justify-center">
+      <div ref={setBox} className="absolute inset-0 flex items-center justify-center">
         <div className="relative" style={{ width: CANVAS_W * scale, height: CANVAS_H * scale }}>
           <Backdrop background={sceneBackground} assets={assets} />
           <div className="absolute inset-0 overflow-hidden">
@@ -253,14 +265,16 @@ export default function Player({ engine, assets, title, mode = 'play', onExit, o
               />
             </div>
           </div>
-            {/* Exit buttons sit on the edges of the scene itself (not the screen), so they stay with the picture on any screen shape. */}
-            {!blocked && DIRECTIONS.filter((d) => scene.exits[d.key] && engine.scenes.has(scene.exits[d.key])).map((d) => (
-              <ExitButton key={d.key} direction={d.key} onClick={() => engine.tryExit(d.key)} />
-            ))}
           </div>
         </div>
       </div>
       )}
+
+      {/* Exit buttons sit on the edges of the SCREEN (the picture is extended to fill it), so they are easy to reach on any screen shape.
+          When the test-play tool panel is open it covers the right edge, so the right-hand arrows step aside. */}
+      {!onMap && scene && !blocked && DIRECTIONS.filter((d) => scene.exits[d.key] && engine.scenes.has(scene.exits[d.key])).map((d) => (
+        <ExitButton key={d.key} direction={d.key} onClick={() => engine.tryExit(d.key)} toolsOpen={mode === 'preview' && debugOpen} />
+      ))}
 
       {!onMap && <ObjectivesBar engine={engine} />}
 

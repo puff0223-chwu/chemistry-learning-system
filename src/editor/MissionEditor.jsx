@@ -1,5 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { checkMission } from '../lib/missionCheck.js'
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
+import { PanelCrash } from '../components/CrashPage.jsx'
 import ContextMenu from './ContextMenu.jsx'
 import LockWizard from './LockWizard.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
@@ -39,6 +41,47 @@ function statusText(status, savedAt, saveError) {
 
 // The full-screen scene editor. It knows nothing about Supabase: the page hands in the draft, the assets
 // and the save / upload functions, so it can also be exercised on its own.
+// Remembers a yes/no choice (here: which side panels are open) in this browser; fine if storage is blocked.
+function usePersistedFlag(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const saved = localStorage.getItem(key)
+      return saved === null ? initial : saved === '1'
+    } catch {
+      return initial
+    }
+  })
+  const update = (next) => {
+    setValue(next)
+    try {
+      localStorage.setItem(key, next ? '1' : '0')
+    } catch {
+      // not saved, only forgotten on reload
+    }
+  }
+  return [value, update]
+}
+
+// The little round tab on a side panel's edge that folds it away (and brings it back), to give the canvas more room.
+function PanelToggle({ side, open, onToggle }) {
+  const place = side === 'left' ? (open ? '-right-3' : 'left-0') : open ? '-left-3' : 'right-0'
+  const arrow = side === 'left' ? (open ? '‹' : '›') : open ? '›' : '‹'
+  const label = side === 'left' ? '左邊的場景與素材面板' : '右邊的屬性面板'
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={open ? `收起${label}（畫布會變大）` : `展開${label}`}
+      aria-label={open ? `收起${label}` : `展開${label}`}
+      className={`absolute top-3 z-20 w-6 h-10 rounded-full bg-white border border-slate-300 shadow text-slate-600 hover:bg-cyan hover:text-white font-bold ${place}`}
+    >
+      {arrow}
+    </button>
+  )
+}
+
+const REPORT_LIMIT = 60 // the check list shows this many of each kind, so a huge mission does not flood the screen
+
 export default function MissionEditor({ missionId, title, initialDraft, initialAssets, save, upload, check, publish, onBack }) {
   const editor = useMissionEditor({ initialDraft, save, storageKey: `mission-draft-${missionId}` })
   const { draft, stage, scene, object, objectIds, sceneId, status, savedAt, saveError, canUndo, canRedo, actions } = editor
@@ -59,6 +102,8 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   const [stageTab, setStageTab] = useState('flow')
   const [flagsOpen, setFlagsOpen] = useState(false)
   const [preview, setPreview] = useState(null) // GameEngine while test-playing
+  const [leftOpen, setLeftOpen] = usePersistedFlag('editor-left-open', true)
+  const [rightOpen, setRightOpen] = usePersistedFlag('editor-right-open', true)
   const [menu, setMenu] = useState(null) // right-click menu: { x, y, title, items }
   const [wizardFor, setWizardFor] = useState(null) // id of the lock the 題目精靈 is editing
   const closeMenu = useCallback(() => setMenu(null), [])
@@ -202,6 +247,10 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
       objects: stage.scenes.flatMap((sc) => sc.objects.map((o) => ({ id: o.id, name: o.name, type: o.type, sceneName: sc.name }))),
       groups: stage.scenes.flatMap((sc) => (sc.groups ?? []).map((g) => ({ id: g.id, name: g.name, sceneName: sc.name }))),
       flags: collectFlags(draft),
+      // for conditions: places, objects and questions of the WHOLE mission (what the game tracks is mission-wide)
+      places: draft.stages.flatMap((st) => st.scenes.map((sc) => ({ id: sc.sceneId, name: sc.name, stageTitle: st.title }))),
+      things: draft.stages.flatMap((st) => st.scenes.flatMap((sc) => sc.objects.filter((o) => o.type !== 'lock').map((o) => ({ id: o.id, name: o.name, type: o.type, sceneName: draft.stages.length > 1 ? `${st.title}・${sc.name}` : sc.name })))),
+      locks: draft.stages.flatMap((st) => st.scenes.flatMap((sc) => sc.objects.filter((o) => o.type === 'lock').map((o) => ({ id: o.id, name: o.name, type: o.type, sceneName: draft.stages.length > 1 ? `${st.title}・${sc.name}` : sc.name })))),
       objectives: draft.stages.flatMap((st) => (st.objectives ?? []).map((o) => ({ id: o.objectiveId, text: o.text || '（還沒命名的目標）', stageTitle: st.title }))),
       assets,
     }),
@@ -519,6 +568,9 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
       </div>
 
       <div className="flex-1 min-h-0 flex min-w-[1100px]">
+        <div className="relative flex shrink-0">
+        <PanelToggle side="left" open={leftOpen} onToggle={() => setLeftOpen(!leftOpen)} />
+        {leftOpen && (
         <LeftPanel
           scenes={stage.scenes}
           sceneId={sceneId}
@@ -536,6 +588,8 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           onUpload={handleUpload}
           uploadMessage={uploadMessage}
         />
+        )}
+        </div>
 
         {view === 'stages' ? (
           <div className="flex-1 min-w-0">
@@ -596,7 +650,15 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           </div>
         )}
 
-        {scene && <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} objectIds={objectIds} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} onPickIcon={setIconPickerFor} onPreviewLock={previewLock} />}
+        <div className="relative flex shrink-0">
+        <PanelToggle side="right" open={rightOpen} onToggle={() => setRightOpen(!rightOpen)} />
+        {scene && rightOpen && (
+          // a failure inside the side panel must not blank the whole editor; picking something else resets it
+          <ErrorBoundary key={`${sceneId}-${objectIds.join(',')}`} fallback={<PanelCrash />}>
+            <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} objectIds={objectIds} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} onPickIcon={setIconPickerFor} onPreviewLock={previewLock} />
+          </ErrorBoundary>
+        )}
+        </div>
       </div>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.title} items={menu.items} onClose={closeMenu} />}
@@ -663,12 +725,14 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           >
             {(blocked || result.warnings.length > 0) && (
               <ul className="text-sm flex flex-col gap-1.5 max-h-72 overflow-y-auto">
-                {result.errors.map((t, i) => (
+                {result.errors.slice(0, REPORT_LIMIT).map((t, i) => (
                   <Item key={`e${i}`} text={t} place={result.errorWhere?.[i]} tone="e" />
                 ))}
-                {result.warnings.map((t, i) => (
+                {result.errors.length > REPORT_LIMIT && <li className="text-xs text-slate-500 px-2">…還有 {result.errors.length - REPORT_LIMIT} 項必須修好的問題，先修上面這些再檢查一次。</li>}
+                {result.warnings.slice(0, REPORT_LIMIT).map((t, i) => (
                   <Item key={`w${i}`} text={t} place={result.warningWhere?.[i]} tone="w" />
                 ))}
+                {result.warnings.length > REPORT_LIMIT && <li className="text-xs text-slate-500 px-2">…還有 {result.warnings.length - REPORT_LIMIT} 項提醒沒有列出。</li>}
               </ul>
             )}
           </ConfirmDialog>

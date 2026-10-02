@@ -1,5 +1,5 @@
 import { validateLock } from './lockLogic.js'
-import { collectEventSources, completionSources, isEmptyCondition, listSources, usesGoalCompletion, walkActions } from './missionEvents.js'
+import { FACT_KEYS, collectEventSources, completionSources, isEmptyCondition, listSources, usesGoalCompletion, walkActions } from './missionEvents.js'
 
 // Pre-publish health check (spec-v5 §17.5), for missions of one or several stages.
 // `existingAssetIds` = ids that still exist in the asset library.
@@ -111,7 +111,11 @@ export function checkMission(data, existingAssetIds) {
   for (const source of listSources(data)) {
     for (const c of source.conditions) {
       if ((c?.objectivesDone ?? []).some((id) => id && !objectiveIds.has(id))) err(`${source.label}：條件用到已經刪除的任務目標，請重新選擇。`, source.where)
-      const blank = ['allFlags', 'anyFlags', 'notFlags', 'objectivesDone'].some((k) => (c?.[k] ?? []).some((f) => !f))
+      const gone = (keys, has) => keys.some((k) => (c?.[k] ?? []).some((id) => id && !has(id)))
+      if (gone(['visitedScenes', 'notVisitedScenes'], (id) => sceneById.has(id))) err(`${source.label}：條件用到已經刪除的地點（場景），請重新選擇。`, source.where)
+      if (gone(['clickedObjects', 'notClickedObjects'], (id) => objectById.has(id))) err(`${source.label}：條件用到已經刪除的物件，請重新選擇。`, source.where)
+      if (gone(['solvedLocks', 'notSolvedLocks'], (id) => lockById.has(id))) err(`${source.label}：條件用到已經刪除的題目，請重新選擇。`, source.where)
+      const blank = ['allFlags', 'anyFlags', 'notFlags', 'objectivesDone', ...FACT_KEYS].some((k) => (c?.[k] ?? []).some((f) => !f))
       if (blank) warn(`${source.label}：有一個條件還沒選是哪一項，目前會被忽略。`, source.where)
     }
   }
