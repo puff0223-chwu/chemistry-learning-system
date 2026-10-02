@@ -453,7 +453,7 @@ function DirectionEditor({ answer, onChange }) {
   )
 }
 
-function AnswerEditor({ lock, onChange, assets }) {
+export function AnswerEditor({ lock, onChange, assets }) {
   const common = { answer: lock.answer, onChange, assets }
   switch (lock.answerType) {
     case 'text':
@@ -485,7 +485,7 @@ function AnswerEditor({ lock, onChange, assets }) {
 
 const PARTIAL_TYPES = ['match', 'order', 'categorize']
 
-function AskTab({ lock, assets, onChange, onPreview }) {
+function AskTab({ lock, assets, onChange, onPreview, onWizard }) {
   // Switching the question type keeps what was entered for the old type, so switching back loses nothing.
   function switchType(type) {
     if (type === lock.answerType) return
@@ -494,6 +494,12 @@ function AskTab({ lock, assets, onChange, onPreview }) {
   }
   return (
     <div className="flex flex-col gap-5">
+      {onWizard && (
+        <button type="button" onClick={onWizard} className="bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-800 rounded-xl px-3 py-2 text-sm font-bold text-left">
+          🧙 用題目精靈，一步一步設定這一題
+          <span className="block text-xs font-normal text-violet-700">不知道從哪裡開始？按這裡，我會一題一題問你。</span>
+        </button>
+      )}
       <Step n={1} title="題目是什麼？" hint="學生打開這一題時，會先看到這段文字。可以放圖片、化學式。">
         <RichTextEditor key={lock.id} value={lock.prompt} onChange={(html) => onChange({ prompt: html }, { key: `prompt-${lock.id}` })} minHeight={110} />
       </Step>
@@ -687,7 +693,7 @@ const TABS = [
 ]
 
 // Everything about one answer lock, in the order a teacher builds it: question → hints → what happens → look.
-export default function LockProperties({ lock, assets, ctx, TabBar, onChange, onPickIcon, onPreview }) {
+export default function LockProperties({ lock, assets, ctx, TabBar, onChange, onPickIcon, onPreview, onWizard }) {
   const [tab, setTab] = useState('ask')
   return (
     <div className="flex flex-col gap-3">
@@ -695,7 +701,7 @@ export default function LockProperties({ lock, assets, ctx, TabBar, onChange, on
         <input value={lock.name} onChange={(e) => onChange({ name: e.target.value }, { key: `prop-${lock.id}-name` })} className={inputClass} />
       </Field>
       <TabBar tabs={TABS.map((t) => (t.key === 'after' && lock.onSuccess?.length ? { ...t, badge: '⚡' } : t))} value={tab} onChange={setTab} />
-      {tab === 'ask' && <AskTab lock={lock} assets={assets} onChange={onChange} onPreview={onPreview} />}
+      {tab === 'ask' && <AskTab lock={lock} assets={assets} onChange={onChange} onPreview={onPreview} onWizard={onWizard} />}
       {tab === 'help' && <HelpTab lock={lock} onChange={onChange} />}
       {tab === 'after' && <AfterTab lock={lock} ctx={ctx} onChange={onChange} />}
       {tab === 'look' && <LookTab lock={lock} ctx={ctx} onChange={onChange} onPickIcon={onPickIcon} />}

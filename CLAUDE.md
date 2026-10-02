@@ -75,6 +75,7 @@
 - 事件編輯器 UX（老師實測後改版，請沿用）：用「進度記號」而不是「旗標」；記號只能從清單選或新增（`EventEditor.jsx` 的 `FlagPicker`），總覽與改名在 `FlagManager.jsx`；條件是句子式列表並自動顯示白話解釋（`ConditionEditor`、`describeCondition`）；步驟是依種類上色的卡片並提供常用範例（`RECIPES`）；物件互動在「外觀／互動」分頁；關卡的開場／過關方式／過關後集中在 `StageDialog.jsx`；圖示庫在 `icons.js`（可中文搜尋）。新增動作時，`ACTION_META`（含圖示、說明、分類顏色）也要補。
 - 多關卡（第 6 階段）：任務 JSON 的 `stages[]`＋`stageLinks[]`（規則見 `docs/PROGRESS.md` 第 6 階段）；引擎 `GameEngine` 管解鎖／目標／重置（旗標與目標狀態整任務共用，`goto_scene` 只限同一關）；編輯器 `StageMap.jsx`（關卡圖）、`StageDialog.jsx`（開場／過關／任務目標）、`graphLayout.js`（自動整理）；學生端 `src/player/StageUi.jsx`（關卡地圖畫面、目標欄）；發布健檢 `missionCheck.js` 已改為多關卡版。測試：`tests/stages.test.mjs`。
 - 後台任務紀錄：`src/pages/AdminMissionLogs.jsx`（`/admin/logs/mission`）、查詢 `src/lib/missionLogQueries.js`、統計與卡關分析（純函式）`src/lib/missionStats.js`（測試 `tests/mission-stats.test.mjs`）。新增事件類型時，要在 `missionStats.js` 的 `MISSION_EVENT_LABELS`／`describeMissionEvent` 補白話說明。
+- 題目精靈與右鍵選單：`src/editor/LockWizard.jsx`（新增答案鎖時自動打開，直接編輯那一題；新增題型時精靈的題型卡片 `COMMON`/`EXAMPLES` 也要看一下）、`src/editor/ContextMenu.jsx`（通用選單元件），選單內容由 `MissionEditor.jsx` 的 `openObjectMenu`／`openCanvasMenu`／`openSceneMenu` 組出；新增常用物件操作時，請順手加進右鍵選單。
 - 紀錄：`src/lib/missionLogQueue.js`（IndexedDB 離線佇列；`createMissionRecorder` 產生遞增流水號）。**流水號與進度存檔必須一起存**（見 MissionPlay 的 `persist`），否則續玩會重複使用流水號而被資料庫丟掉紀錄。
 - 發布：編輯器「📢 發布」→ `missionCheck.js` 健檢 → `publishMission()`；是否對學生開放由任務列表的「開放給學生」控制。
 - 網址：學生 `/missions`、`/mission/:id`；後台編輯器 `/admin/missions/:id/edit`；後台素材庫 `/admin/assets`；後台 `/admin/missions`、`/admin/mission-categories`；舊版 `/task`、`/battle` 不變。

@@ -24,7 +24,13 @@ function BlockControls({ ids, actions, extra }) {
 function ObjectRow({ o, indent, selectedIds, actions }) {
   const on = selectedIds.includes(o.id)
   return (
-    <li className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm ${indent ? 'ml-5' : ''} ${on ? 'bg-cyan/15 ring-1 ring-cyan' : 'hover:bg-slate-100'}`}>
+    <li
+      onContextMenu={(e) => {
+        e.preventDefault()
+        actions.openObjectMenu(e.clientX, e.clientY, selectedIds.includes(o.id) ? selectedIds : [o.id])
+      }}
+      className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm ${indent ? 'ml-5' : ''} ${on ? 'bg-cyan/15 ring-1 ring-cyan' : 'hover:bg-slate-100'}`}
+    >
       <button type="button" title={o.visible ? '一開始會顯示，按一下改成「一開始看不到」' : '一開始看不到，按一下改成顯示'} onClick={() => actions.updateObject(o.id, { visible: !o.visible })} className="w-6">
         {o.visible ? '👁️' : '🚫'}
       </button>
@@ -50,7 +56,13 @@ function GroupRow({ group, members, collapsed, onToggle, selectedIds, actions })
   const allShown = members.every((m) => m.visible)
   const allLocked = members.every((m) => m.locked)
   return (
-    <li className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm bg-violet-50 ${on ? 'ring-1 ring-violet-400' : 'hover:bg-violet-100'}`}>
+    <li
+      onContextMenu={(e) => {
+        e.preventDefault()
+        actions.openObjectMenu(e.clientX, e.clientY, ids)
+      }}
+      className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm bg-violet-50 ${on ? 'ring-1 ring-violet-400' : 'hover:bg-violet-100'}`}
+    >
       <button type="button" onClick={onToggle} aria-label={collapsed ? '展開群組' : '收合群組'} className="w-5 text-xs">
         {collapsed ? '▸' : '▾'}
       </button>

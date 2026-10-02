@@ -1,5 +1,7 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { checkMission } from '../lib/missionCheck.js'
+import ContextMenu from './ContextMenu.jsx'
+import LockWizard from './LockWizard.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import { collectFlags, completionSources, flagUsage } from '../lib/missionEvents.js'
 import { CANVAS_H, CANVAS_W, validateImport } from '../lib/missionSchema.js'
@@ -57,6 +59,9 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   const [stageTab, setStageTab] = useState('flow')
   const [flagsOpen, setFlagsOpen] = useState(false)
   const [preview, setPreview] = useState(null) // GameEngine while test-playing
+  const [menu, setMenu] = useState(null) // right-click menu: { x, y, title, items }
+  const [wizardFor, setWizardFor] = useState(null) // id of the lock the 題目精靈 is editing
+  const closeMenu = useCallback(() => setMenu(null), [])
   const [publishState, setPublishState] = useState(null) // { phase: 'checking' | 'report' | 'publishing', result? }
   const areaRef = useRef(null)
   const importInput = useRef(null)
@@ -76,12 +81,12 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   // Keyboard shortcuts always use the freshest actions.
   const latest = useRef(null)
   useEffect(() => {
-    latest.current = { actions, object, objectIds, scene, view, previewing: !!preview }
+    latest.current = { actions, object, objectIds, scene, view, previewing: !!preview, modal: !!wizardFor }
   })
   useEffect(() => {
     function onKeyDown(e) {
-      const { actions: a, objectIds: ids, scene: sc, view: v, previewing } = latest.current
-      if (previewing) return // keys belong to the game while test-playing
+      const { actions: a, objectIds: ids, scene: sc, view: v, previewing, modal } = latest.current
+      if (previewing || modal) return // keys belong to the game while test-playing, or to the open dialog
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault()
@@ -205,9 +210,13 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
 
   const usage = useMemo(() => flagUsage(draft), [draft])
 
-  function addObject(type) {
-    const id = actions.addObject(type)
+  // `at` = where it was right-clicked (logical canvas pixels); without it the object starts in the middle.
+  function addObject(type, at) {
+    const size = { icon: [120, 120], text: [500, 160], hotspot: [200, 200], lock: [120, 120] }[type]
+    const extra = at && size ? { x: Math.round(Math.max(0, Math.min(CANVAS_W - size[0], at.x - size[0] / 2))), y: Math.round(Math.max(0, Math.min(CANVAS_H - size[1], at.y - size[1] / 2))) } : {}
+    const id = actions.addObject(type, extra)
     if (type === 'icon' && id) setIconPickerFor(id) // a new icon starts by choosing which one
+    if (type === 'lock' && id) setWizardFor(id) // a new answer lock opens the 題目精靈
   }
 
   function pickIcon(emoji) {
@@ -292,7 +301,85 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
   }
 
   const st = statusText(status, savedAt, saveError)
-  const wrappedActions = { ...actions, requestDeleteScene: setDeleteSceneId }
+  // ---- right-click menus ----------------------------------------------------------------------------
+  function openObjectMenu(x, y, ids) {
+    if (!scene) return
+    const objs = scene.objects.filter((o) => ids.includes(o.id))
+    if (objs.length === 0) return
+    if (ids.length !== objectIds.length || ids.some((id) => !objectIds.includes(id))) actions.selectObjects(ids)
+    const one = objs.length === 1 ? objs[0] : null
+    const groupId = objs.find((o) => o.groupId)?.groupId
+    const allShown = objs.every((o) => o.visible)
+    const allLocked = objs.every((o) => o.locked)
+    const set = (p) => actions.updateObjects(objs.map((o) => ({ id: o.id, patch: p })), { important: true })
+    setMenu({
+      x,
+      y,
+      title: one ? `${one.name}` : `已選 ${objs.length} 個物件`,
+      items: [
+        one?.type === 'lock' && { icon: '🧙', label: '題目精靈（一步一步設定）', onClick: () => setWizardFor(one.id) },
+        one?.type === 'lock' && { icon: '▶', label: '試答看看', onClick: () => previewLock(one.id) },
+        one?.type === 'icon' && { icon: '🎨', label: '換圖示…', onClick: () => setIconPickerFor(one.id) },
+        'sep',
+        { icon: '⧉', label: '複製', hint: 'Ctrl+D', onClick: () => actions.duplicateObjects(ids) },
+        objs.length > 1 && { icon: '🗂', label: '組成群組', hint: 'Ctrl+G', onClick: () => actions.groupSelected() },
+        groupId && { icon: '🔓', label: '解散群組', onClick: () => actions.ungroup(groupId) },
+        'sep',
+        { icon: '⤒', label: '移到最上層', onClick: () => actions.moveLayer(ids, 'top') },
+        { icon: '↑', label: '上移一層', onClick: () => actions.moveLayer(ids, 'up') },
+        { icon: '↓', label: '下移一層', onClick: () => actions.moveLayer(ids, 'down') },
+        { icon: '⤓', label: '移到最下層', onClick: () => actions.moveLayer(ids, 'bottom') },
+        'sep',
+        { icon: allShown ? '🚫' : '👁️', label: allShown ? '一開始先隱藏' : '一開始就顯示', onClick: () => set({ visible: !allShown }) },
+        { icon: allLocked ? '🔓' : '🔒', label: allLocked ? '解除鎖定' : '鎖定（避免誤拖）', onClick: () => set({ locked: !allLocked }) },
+        'sep',
+        { icon: '🗑', label: '刪除', hint: 'Delete', danger: true, onClick: () => actions.deleteObjects(ids) },
+      ],
+    })
+  }
+
+  function openCanvasMenu({ clientX, clientY, objectId, point }) {
+    if (!scene) return
+    if (objectId) {
+      openObjectMenu(clientX, clientY, objectIds.includes(objectId) ? objectIds : [objectId])
+      return
+    }
+    setMenu({
+      x: clientX,
+      y: clientY,
+      title: `場景「${scene.name}」`,
+      items: [
+        { icon: '🔤', label: '在這裡加文字', onClick: () => addObject('text', point) },
+        { icon: '⭐', label: '在這裡加圖示', onClick: () => addObject('icon', point) },
+        { icon: '👆', label: '在這裡加隱形點擊區', onClick: () => addObject('hotspot', point) },
+        { icon: '🔐', label: '在這裡加答案鎖（精靈帶你設定）', onClick: () => addObject('lock', point) },
+        'sep',
+        scene.objects.length > 0 && { icon: '▦', label: '全選', onClick: () => actions.selectObjects(scene.objects.map((o) => o.id)) },
+        scene.sceneId !== stage.startSceneId && { icon: '★', label: '設為起始場景', onClick: () => actions.setStartScene(scene.sceneId) },
+        { icon: '⧉', label: '複製這個場景', onClick: () => actions.duplicateScene(scene.sceneId) },
+      ],
+    })
+  }
+
+  function openSceneMenu(x, y, id) {
+    const target = stage.scenes.find((s) => s.sceneId === id)
+    if (!target) return
+    setMenu({
+      x,
+      y,
+      title: `場景「${target.name}」`,
+      items: [
+        { icon: '📂', label: '開啟這個場景', onClick: () => (actions.selectScene(id), setView('canvas')) },
+        { icon: '★', label: '設為起始場景', disabled: id === stage.startSceneId, onClick: () => actions.setStartScene(id) },
+        { icon: '⧉', label: '複製場景', onClick: () => actions.duplicateScene(id) },
+        'sep',
+        { icon: '🗑', label: '刪除場景', danger: true, onClick: () => setDeleteSceneId(id) },
+      ],
+    })
+  }
+
+  const wizardLock = wizardFor ? scene?.objects.find((o) => o.id === wizardFor && o.type === 'lock') : null
+  const wrappedActions = { ...actions, requestDeleteScene: setDeleteSceneId, openObjectMenu, openWizard: setWizardFor }
 
   return (
     <div className="h-screen flex flex-col bg-paper text-navy overflow-hidden">
@@ -442,6 +529,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
             actions.selectScene(id)
             setView('canvas')
           }}
+          onSceneMenu={openSceneMenu}
           onAddScene={actions.addScene}
           onAddObject={addObject}
           onAddAsset={(a) => placeAsset(a)}
@@ -481,6 +569,7 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
                   onChange={actions.updateObject}
                   onChangeMany={actions.updateObjects}
                   onDropAsset={(id, pos) => assetMap[id] && placeAsset(assetMap[id], pos)}
+                  onContextMenu={openCanvasMenu}
                 />
               ) : (
                 <p className="text-slate-600">這個任務還沒有場景，按左邊「＋ 新增」建立第一個場景。</p>
@@ -509,6 +598,10 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
 
         {scene && <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} objectIds={objectIds} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} onPickIcon={setIconPickerFor} onPreviewLock={previewLock} />}
       </div>
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.title} items={menu.items} onClose={closeMenu} />}
+
+      {wizardLock && <LockWizard lock={wizardLock} assets={assets} onChange={(patch, opts) => actions.updateObject(wizardLock.id, patch, opts)} onPreview={() => previewLock(wizardLock.id)} onClose={() => setWizardFor(null)} />}
 
       {iconPickerFor && <IconPicker current={scene?.objects.find((o) => o.id === iconPickerFor)?.icon} onPick={pickIcon} onClose={() => setIconPickerFor(null)} />}
 

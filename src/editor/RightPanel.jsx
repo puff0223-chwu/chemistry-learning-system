@@ -195,7 +195,7 @@ function GroupNote({ group, object, onUpdate, onSelectGroup }) {
   )
 }
 
-function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPickIcon, onPreviewLock, onSelectGroup }) {
+function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPickIcon, onPreviewLock, onWizardLock, onSelectGroup }) {
   const [tab, setTab] = useState(object.type === 'hotspot' ? 'interact' : 'look')
   if (object.type === 'lock') {
     return (
@@ -207,6 +207,7 @@ function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPi
         onChange={(patch, opts) => onUpdate(object.id, patch, opts)}
         onPickIcon={() => onPickIcon(object.id)}
         onPreview={() => onPreviewLock(object.id)}
+        onWizard={() => onWizardLock(object.id)}
       />
     )
   }
@@ -384,7 +385,7 @@ export default function RightPanel({ scene, scenes, stage, object, objectIds, as
         {objectIds.length > 1 ? (
           <SelectionPanel scene={scene} selectedIds={objectIds} actions={actions} />
         ) : object ? (
-          <ObjectProperties key={object.id} object={object} group={group} onSelectGroup={() => actions.selectObject(object.id)} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} onPickIcon={onPickIcon} onPreviewLock={onPreviewLock} />
+          <ObjectProperties key={object.id} object={object} group={group} onSelectGroup={() => actions.selectObject(object.id)} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} onPickIcon={onPickIcon} onPreviewLock={onPreviewLock} onWizardLock={actions.openWizard} />
         ) : (
           <SceneProperties
             key={scene.sceneId}
