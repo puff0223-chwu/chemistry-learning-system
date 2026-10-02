@@ -9,6 +9,8 @@ import { GRADES, PURPOSES } from '../lib/studentInfo.js'
 
 const TH = 'py-2 px-3 text-left whitespace-nowrap font-bold text-slate-500 text-sm'
 const TD = 'py-2 px-3 whitespace-nowrap'
+// free-text columns (names, class, mission title): very long values are cut short so they cannot push the other columns off screen
+const TDX = `${TD} max-w-[11rem] overflow-hidden text-ellipsis`
 const FIELD = 'flex flex-col gap-1 text-sm text-slate-600'
 const CONTROL = 'bg-white border border-slate-300 rounded-lg px-3 py-2 text-navy'
 const BTN = 'bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40 rounded-lg px-4 py-2 text-sm font-bold'
@@ -293,11 +295,11 @@ export default function AdminMissionLogs() {
                           <Fragment key={session.session_uuid}>
                             <tr className="border-b border-slate-100">
                               <td className={TD}>{formatDateTime(s.date)}</td>
-                              <td className={TD}>{s.mission}</td>
+                              <td className={TDX} title={s.mission}>{s.mission}</td>
                               <td className={TD}>{s.grade}</td>
-                              <td className={TD}>{s.className}</td>
+                              <td className={TDX} title={s.className}>{s.className}</td>
                               <td className={TD}>{s.seat}</td>
-                              <td className={`${TD} font-bold`}>{s.name}</td>
+                              <td className={`${TDX} font-bold`} title={s.name}>{s.name}</td>
                               <td className={TD}>{s.stagesDone}</td>
                               <td className={TD}>{s.minutes}</td>
                               <td className={TD}>{s.wrong}</td>

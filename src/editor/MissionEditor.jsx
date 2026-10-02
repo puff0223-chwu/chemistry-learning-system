@@ -1,5 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { checkMission } from '../lib/missionCheck.js'
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
+import { PanelCrash } from '../components/CrashPage.jsx'
 import ContextMenu from './ContextMenu.jsx'
 import LockWizard from './LockWizard.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
@@ -39,6 +41,8 @@ function statusText(status, savedAt, saveError) {
 
 // The full-screen scene editor. It knows nothing about Supabase: the page hands in the draft, the assets
 // and the save / upload functions, so it can also be exercised on its own.
+const REPORT_LIMIT = 60 // the check list shows this many of each kind, so a huge mission does not flood the screen
+
 export default function MissionEditor({ missionId, title, initialDraft, initialAssets, save, upload, check, publish, onBack }) {
   const editor = useMissionEditor({ initialDraft, save, storageKey: `mission-draft-${missionId}` })
   const { draft, stage, scene, object, objectIds, sceneId, status, savedAt, saveError, canUndo, canRedo, actions } = editor
@@ -596,7 +600,12 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           </div>
         )}
 
-        {scene && <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} objectIds={objectIds} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} onPickIcon={setIconPickerFor} onPreviewLock={previewLock} />}
+        {scene && (
+          // a failure inside the side panel must not blank the whole editor; picking something else resets it
+          <ErrorBoundary key={`${sceneId}-${objectIds.join(',')}`} fallback={<PanelCrash />}>
+            <RightPanel scene={scene} scenes={stage.scenes} stage={stage} object={object} objectIds={objectIds} assets={assets} assetMap={assetMap} ctx={ctx} actions={wrappedActions} onPickIcon={setIconPickerFor} onPreviewLock={previewLock} />
+          </ErrorBoundary>
+        )}
       </div>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.title} items={menu.items} onClose={closeMenu} />}
@@ -663,12 +672,14 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
           >
             {(blocked || result.warnings.length > 0) && (
               <ul className="text-sm flex flex-col gap-1.5 max-h-72 overflow-y-auto">
-                {result.errors.map((t, i) => (
+                {result.errors.slice(0, REPORT_LIMIT).map((t, i) => (
                   <Item key={`e${i}`} text={t} place={result.errorWhere?.[i]} tone="e" />
                 ))}
-                {result.warnings.map((t, i) => (
+                {result.errors.length > REPORT_LIMIT && <li className="text-xs text-slate-500 px-2">…還有 {result.errors.length - REPORT_LIMIT} 項必須修好的問題，先修上面這些再檢查一次。</li>}
+                {result.warnings.slice(0, REPORT_LIMIT).map((t, i) => (
                   <Item key={`w${i}`} text={t} place={result.warningWhere?.[i]} tone="w" />
                 ))}
+                {result.warnings.length > REPORT_LIMIT && <li className="text-xs text-slate-500 px-2">…還有 {result.warnings.length - REPORT_LIMIT} 項提醒沒有列出。</li>}
               </ul>
             )}
           </ConfirmDialog>

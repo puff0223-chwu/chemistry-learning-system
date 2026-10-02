@@ -118,6 +118,26 @@ export function normalizeDraft(raw) {
       }),
     })),
   }))
+  // two stages / scenes / objects / goals with the same id would mix up their pick lists and events: later copies get a fresh id
+  const seen = { st: new Set(), sc: new Set(), ob: new Set(), og: new Set(), gr: new Set() }
+  const unique = (kind, id) => {
+    const next = typeof id === 'string' && id && !seen[kind].has(id) ? id : genId(kind)
+    seen[kind].add(next)
+    return next
+  }
+  for (const stage of data.stages) {
+    stage.stageId = unique('st', stage.stageId)
+    for (const o of stage.objectives) o.objectiveId = unique('og', o.objectiveId)
+    for (const scene of stage.scenes) {
+      scene.sceneId = unique('sc', scene.sceneId)
+      for (const g of scene.groups) {
+        const old = g.id
+        g.id = unique('gr', old)
+        if (g.id !== old) for (const o of scene.objects) if (o.groupId === old) o.groupId = g.id
+      }
+      for (const o of scene.objects) o.id = unique('ob', o.id)
+    }
+  }
   for (const stage of data.stages) {
     if (stage.scenes.length === 0) stage.scenes = [createScene('場景 1')]
     if (!stage.startSceneId || !stage.scenes.some((s) => s.sceneId === stage.startSceneId)) stage.startSceneId = stage.scenes[0]?.sceneId ?? null

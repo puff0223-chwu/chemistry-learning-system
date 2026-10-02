@@ -322,7 +322,7 @@ function ActionParams({ action, onChange, ctx, depth }) {
       return (
         <label className="flex items-center gap-2 text-sm">
           等待
-          <input type="number" min={0} step={0.5} value={(action.ms ?? 0) / 1000} onChange={(e) => set({ ms: Math.max(0, Number(e.target.value)) * 1000 })} className={`${inputClass} w-24`} />
+          <input type="number" min={0} step={0.5} value={(Number(action.ms) || 0) / 1000} onChange={(e) => set({ ms: Math.max(0, Number(e.target.value) || 0) * 1000 })} className={`${inputClass} w-24`} />
           秒，再做下一件事
         </label>
       )
