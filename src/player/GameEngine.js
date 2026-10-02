@@ -1,5 +1,5 @@
 import { checkAnswer, getExplanation, pickWrongFeedback, summarizeInput } from '../lib/lockLogic.js'
-import { DEFERRED_ACTIONS, evalCondition, isBranch, isEmptyCondition, walkActions } from '../lib/missionEvents.js'
+import { DEFERRED_ACTIONS, evalCondition, isBranch, isEmptyCondition, usesGoalCompletion, walkActions } from '../lib/missionEvents.js'
 
 const MAX_CHAIN_DEPTH = 24 // guards against scenes whose "on enter" events send the student around in circles
 const MAX_DELAY_MS = 60000
@@ -537,9 +537,21 @@ export default class GameEngine {
       }
       if (!changed) break
     }
+    if (this.state.stagesDone[this.state.stageId]) return
     const cond = this.stage.completeWhen
-    if (this.state.stagesDone[this.state.stageId] || isEmptyCondition(cond) || !this.check(cond)) return
+    if (isEmptyCondition(cond)) {
+      // no rule of its own: goals alone can finish the stage (see usesGoalCompletion)
+      if (!this.goalCompletion(this.stage)) return
+      const goals = this.stage.objectives.filter((o) => !o.hidden)
+      if (!goals.every((o) => this.state.objectivesDone.includes(o.objectiveId))) return
+    } else if (!this.check(cond)) return
     await this.completeStage()
+  }
+
+  goalCompletion(stage) {
+    this.goalCache ??= new Map()
+    if (!this.goalCache.has(stage.stageId)) this.goalCache.set(stage.stageId, usesGoalCompletion(this.mission, stage))
+    return this.goalCache.get(stage.stageId)
   }
 
   // The mission is finished when something was completed and every stage that is unlocked has been completed.

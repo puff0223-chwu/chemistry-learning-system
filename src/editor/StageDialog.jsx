@@ -155,7 +155,10 @@ function FlowTab({ stage, ctx, completionPlaces, onTitle, onUpdateStage }) {
           ) : (
             <p className="text-slate-600">
               設定方法：選一個物件 → 右側「互動」→「點擊時」→ 選「🏁 點到就過關」（或在步驟裡加「🏁 讓學生過關」）。
-              {!auto && (stage.objectives ?? []).length === 0 && <span className="block text-red-600 font-bold mt-1">⚠️ 目前還沒有任何地方可以過關，學生會玩不完！</span>}
+              {!auto && (stage.objectives ?? []).some((o) => !o.hidden) && (
+                <span className="block text-emerald-700 font-bold mt-1">✅ 這一關有任務目標：學生把所有目標（彩蛋除外）都完成，就會自動過關，不用另外設定。</span>
+              )}
+              {!auto && (stage.objectives ?? []).filter((o) => !o.hidden).length === 0 && <span className="block text-red-600 font-bold mt-1">⚠️ 目前還沒有任何地方可以過關，學生會玩不完！</span>}
             </p>
           )}
         </div>

@@ -168,7 +168,7 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
         ))}
       </select>
 
-      {!isEmptyCondition(value) && <p className="text-xs bg-cyan/10 text-navy rounded px-2 py-1">👉 白話：{describeCondition(value)}</p>}
+      {!isEmptyCondition(value) && <p className="text-xs bg-cyan/10 text-navy rounded px-2 py-1">👉 白話：{describeCondition(value, ctx)}</p>}
     </div>
   )
 }

@@ -135,34 +135,35 @@ export function listSources(data) {
   const multi = data.stages.length > 1
   let current = null
   const pre = () => (multi ? `關卡「${current.title}」・` : '')
-  const addActions = (label, list) => {
-    if (list?.length) out.push({ label: pre() + label, stageId: current?.stageId, actions: list, conditions: branchConditions(list) })
+  // `where` tells the editor where to jump to when a problem is found here: { dialog, sceneId, objectId, view }
+  const addActions = (label, list, where = {}) => {
+    if (list?.length) out.push({ label: pre() + label, stageId: current?.stageId, where: { stageId: current?.stageId, ...where }, actions: list, conditions: branchConditions(list) })
   }
-  const addCondition = (label, cond) => {
-    if (cond) out.push({ label: pre() + label, stageId: current?.stageId, actions: [], conditions: [cond] })
+  const addCondition = (label, cond, where = {}) => {
+    if (cond) out.push({ label: pre() + label, stageId: current?.stageId, where: { stageId: current?.stageId, ...where }, actions: [], conditions: [cond] })
   }
   for (const link of data.stageLinks ?? []) {
     const name = (id) => data.stages.find((s) => s.stageId === id)?.title ?? '？'
-    if (link.when) out.push({ label: `關卡連線「${name(link.from)} → ${name(link.to)}」的條件`, stageId: link.from, actions: [], conditions: [link.when] })
+    if (link.when) out.push({ label: `關卡連線「${name(link.from)} → ${name(link.to)}」的條件`, stageId: link.from, where: { view: 'stages' }, actions: [], conditions: [link.when] })
   }
   for (const stage of data.stages) {
   current = stage
-  addCondition('關卡的「自動過關條件」', stage.completeWhen)
-  addActions('關卡「過關後」', stage.onComplete)
+  addCondition('關卡的「自動過關條件」', stage.completeWhen, { dialog: 'flow' })
+  addActions('關卡「過關後」', stage.onComplete, { dialog: 'flow' })
   for (const obj of stage.objectives ?? []) {
-    addCondition(`目標「${obj.text}」的出現條件`, obj.visibleWhen)
-    addCondition(`目標「${obj.text}」的完成條件`, obj.doneWhen)
-    addActions(`目標「${obj.text}」完成時`, obj.onDone)
+    addCondition(`目標「${obj.text}」的出現條件`, obj.visibleWhen, { dialog: 'goals' })
+    addCondition(`目標「${obj.text}」的完成條件`, obj.doneWhen, { dialog: 'goals' })
+    addActions(`目標「${obj.text}」完成時`, obj.onDone, { dialog: 'goals' })
   }
   for (const scene of stage.scenes) {
-    addActions(`場景「${scene.name}」進入時`, scene.onEnter)
-    for (const [dir, rule] of Object.entries(scene.exitConditions ?? {})) addCondition(`場景「${scene.name}」的出口條件（${dir}）`, rule?.when)
+    addActions(`場景「${scene.name}」進入時`, scene.onEnter, { sceneId: scene.sceneId })
+    for (const [dir, rule] of Object.entries(scene.exitConditions ?? {})) addCondition(`場景「${scene.name}」的出口條件（${dir}）`, rule?.when, { sceneId: scene.sceneId })
     for (const o of scene.objects) {
-      addActions(`場景「${scene.name}」的「${o.name}」被點擊時`, o.onClick)
-      addCondition(`場景「${scene.name}」的「${o.name}」的出現條件`, o.showWhen)
+      addActions(`場景「${scene.name}」的「${o.name}」被點擊時`, o.onClick, { sceneId: scene.sceneId, objectId: o.id })
+      addCondition(`場景「${scene.name}」的「${o.name}」的出現條件`, o.showWhen, { sceneId: scene.sceneId, objectId: o.id })
       if (o.type === 'lock') {
-        addActions(`場景「${scene.name}」的答案鎖「${o.name}」答對時`, o.onSuccess)
-        addActions(`場景「${scene.name}」的答案鎖「${o.name}」按「我真的不會」時`, o.onGiveUp)
+        addActions(`場景「${scene.name}」的答案鎖「${o.name}」答對時`, o.onSuccess, { sceneId: scene.sceneId, objectId: o.id })
+        addActions(`場景「${scene.name}」的答案鎖「${o.name}」按「我真的不會」時`, o.onGiveUp, { sceneId: scene.sceneId, objectId: o.id })
       }
     }
   }
@@ -224,6 +225,14 @@ export function completionSources(data, stageId = null) {
     if (has) found.push(source.label)
   }
   return found
+}
+
+// A stage the teacher gave goals but no way to finish ends by itself once every (non-secret) goal is done.
+// It only applies when nothing else can finish the stage: no auto-finish rule and no "finish the stage" step.
+export function usesGoalCompletion(data, stage) {
+  if (stage.completeWhen) return false
+  if (!(stage.objectives ?? []).some((o) => !o.hidden)) return false
+  return completionSources(data, stage.stageId).length === 0
 }
 
 export function usesElapsedTime(data) {

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { checkMission } from '../lib/missionCheck.js'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import { collectFlags, completionSources, flagUsage } from '../lib/missionEvents.js'
 import { CANVAS_H, CANVAS_W, validateImport } from '../lib/missionSchema.js'
@@ -238,6 +239,34 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
     setPreview(null)
   }
 
+  // The same health check as publishing, running all the time, so the teacher sees what is still missing while editing.
+  const deferredDraft = useDeferredValue(draft)
+  const live = useMemo(() => {
+    try {
+      return checkMission(deferredDraft, new Set(assets.map((a) => a.id)))
+    } catch {
+      return { errors: [], warnings: [], errorWhere: [], warningWhere: [] }
+    }
+  }, [deferredDraft, assets])
+
+  // "去修改": close the report and take the teacher to the place that needs work.
+  function goTo(place = {}) {
+    setPublishState(null)
+    if (place.view === 'stages') {
+      setView('stages')
+      return
+    }
+    if (place.stageId && place.stageId !== stage.stageId) actions.selectStage(place.stageId)
+    if (place.dialog) {
+      setStageTab(place.dialog)
+      setStageOpen(true)
+      return
+    }
+    setView('canvas')
+    if (place.sceneId) actions.selectScene(place.sceneId)
+    if (place.objectId) actions.selectObjects([place.objectId])
+  }
+
   // Publishing: save first, run the health check, show the report, publish on confirmation.
   async function startPublish() {
     setPublishState({ phase: 'checking' })
@@ -381,6 +410,16 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
         <button type="button" onClick={actions.saveNow} disabled={status === 'saving'} title="Ctrl+S" className="bg-cyan hover:bg-cyan-dark disabled:opacity-60 rounded-lg px-4 py-1.5 font-bold">
           💾 儲存
         </button>
+        <button
+          type="button"
+          onClick={() => setPublishState({ phase: 'report', viewOnly: true, result: live })}
+          title={live.errors.length ? `還有 ${live.errors.length} 項一定要修好才能發布，點一下看清單` : live.warnings.length ? `有 ${live.warnings.length} 項提醒（不影響發布），點一下看清單` : '目前沒有發現問題'}
+          className={`rounded-lg px-2.5 py-1.5 font-bold text-sm bg-white/10 hover:bg-white/20 ${live.errors.length ? 'text-red-300' : live.warnings.length ? 'text-amber-300' : 'text-emerald-300'}`}
+        >
+          🩺 {live.errors.length ? `❌${live.errors.length}` : ''}
+          {live.warnings.length ? ` ⚠️${live.warnings.length}` : ''}
+          {!live.errors.length && !live.warnings.length ? '✅' : ''}
+        </button>
         {publish && (
           <button type="button" onClick={startPublish} disabled={!!publishState} title="檢查並發布給學生" className="bg-amber-500 hover:bg-amber-400 disabled:opacity-60 rounded-lg px-4 py-1.5 font-bold">
             📢 發布
@@ -493,39 +532,55 @@ export default function MissionEditor({ missionId, title, initialDraft, initialA
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 text-white text-xl">儲存並檢查中…</div>
       )}
 
-      {(publishState?.phase === 'report' || publishState?.phase === 'publishing') && (
-        <ConfirmDialog
-          title={publishState.result.errors.length ? '還不能發布' : '發布這一版給學生？'}
-          message={
-            publishState.result.errors.length
-              ? '下面的錯誤要先修好才能發布：'
-              : publishState.result.warnings.length
-                ? '有一些提醒，確定沒問題的話可以繼續發布：'
-                : '檢查通過，沒有發現問題。發布後學生玩到的就是目前這個版本（草稿之後再改，不會影響學生，直到你再次發布）。'
-          }
-          confirmText={publishState.result.errors.length ? '知道了' : '確定發布'}
-          busyText="發布中..."
-          confirmClass="bg-amber-500 hover:bg-amber-400"
-          busy={publishState.phase === 'publishing'}
-          onCancel={() => setPublishState(null)}
-          onConfirm={() => (publishState.result.errors.length ? setPublishState(null) : confirmPublish())}
-        >
-          {(publishState.result.errors.length > 0 || publishState.result.warnings.length > 0) && (
-            <ul className="text-sm flex flex-col gap-1 max-h-60 overflow-y-auto">
-              {publishState.result.errors.map((t, i) => (
-                <li key={`e${i}`} className="text-red-700">
-                  ❌ {t}
-                </li>
-              ))}
-              {publishState.result.warnings.map((t, i) => (
-                <li key={`w${i}`} className="text-amber-700">
-                  ⚠️ {t}
-                </li>
-              ))}
-            </ul>
-          )}
-        </ConfirmDialog>
-      )}
+      {(publishState?.phase === 'report' || publishState?.phase === 'publishing') && (() => {
+        const { result, viewOnly } = publishState
+        const blocked = result.errors.length > 0
+        const Item = ({ text, place, tone }) => (
+          <li className={`flex items-start gap-2 rounded-lg px-2 py-1.5 ${tone === 'e' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>
+            <span className="flex-1">
+              {tone === 'e' ? '❌' : '⚠️'} {text}
+            </span>
+            {place && Object.keys(place).length > 0 && (
+              <button type="button" onClick={() => goTo(place)} className="shrink-0 bg-white border border-slate-300 hover:bg-slate-100 text-navy rounded-lg px-2 py-0.5 text-xs font-bold">
+                👉 去修改
+              </button>
+            )}
+          </li>
+        )
+        return (
+          <ConfirmDialog
+            title={viewOnly ? '🩺 檢查清單' : blocked ? '還不能發布' : '發布這一版給學生？'}
+            message={
+              blocked
+                ? '❌ 一定要修好才能發布；⚠️ 只是提醒，可以不修。每一項右邊的「去修改」會直接帶你到那個地方：'
+                : result.warnings.length
+                  ? viewOnly
+                    ? '沒有一定要修的問題。下面是一些提醒（不影響發布）：'
+                    : '沒有一定要修的問題，下面是一些提醒。確定沒問題的話可以直接發布：'
+                  : viewOnly
+                    ? '目前沒有發現任何問題 👍'
+                    : '檢查通過，沒有發現問題。發布後學生玩到的就是目前這個版本（草稿之後再改，不會影響學生，直到你再次發布）。'
+            }
+            confirmText={viewOnly || blocked ? '關閉' : '確定發布'}
+            busyText="發布中..."
+            confirmClass={viewOnly || blocked ? 'bg-slate-600 hover:bg-slate-500' : 'bg-amber-500 hover:bg-amber-400'}
+            busy={publishState.phase === 'publishing'}
+            onCancel={() => setPublishState(null)}
+            onConfirm={() => (viewOnly || blocked ? setPublishState(null) : confirmPublish())}
+          >
+            {(blocked || result.warnings.length > 0) && (
+              <ul className="text-sm flex flex-col gap-1.5 max-h-72 overflow-y-auto">
+                {result.errors.map((t, i) => (
+                  <Item key={`e${i}`} text={t} place={result.errorWhere?.[i]} tone="e" />
+                ))}
+                {result.warnings.map((t, i) => (
+                  <Item key={`w${i}`} text={t} place={result.warningWhere?.[i]} tone="w" />
+                ))}
+              </ul>
+            )}
+          </ConfirmDialog>
+        )
+      })()}
 
       {deleteSceneId && (
         <ConfirmDialog
