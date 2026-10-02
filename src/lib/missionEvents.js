@@ -74,10 +74,15 @@ const FLAG_KEYS = ['allFlags', 'anyFlags', 'notFlags']
 // Empty names are placeholders the editor keeps while a teacher is still choosing; the game ignores them.
 const names = (list) => (list ?? []).filter(Boolean)
 
+// Facts the game keeps track of by itself, so a teacher never has to "remember" them with a marker:
+// places visited, objects clicked, questions solved. Each has a "has" and a "has not" version.
+export const FACT_KEYS = ['visitedScenes', 'notVisitedScenes', 'clickedObjects', 'notClickedObjects', 'solvedLocks', 'notSolvedLocks']
+
 export function isEmptyCondition(c) {
   if (!c) return true
   return (
     FLAG_KEYS.every((k) => names(c[k]).length === 0) &&
+    FACT_KEYS.every((k) => names(c[k]).length === 0) &&
     !(c.hasItems?.length > 0) &&
     names(c.objectivesDone).length === 0 &&
     !(c.notebookCountAtLeast > 0) &&
@@ -99,6 +104,15 @@ export function evalCondition(c, view) {
   if (c.hasItems?.length && !c.hasItems.every((id) => view.items.includes(id))) return false
   const goals = names(c.objectivesDone)
   if (goals.length && !goals.every((id) => view.objectivesDone.includes(id))) return false
+  const visited = view.visited ?? {}
+  const clicked = view.clicked ?? {}
+  const solved = (id) => view.locks?.[id]?.solved === true
+  if (!names(c.visitedScenes).every((id) => visited[id])) return false
+  if (names(c.notVisitedScenes).some((id) => visited[id])) return false
+  if (!names(c.clickedObjects).every((id) => clicked[id])) return false
+  if (names(c.notClickedObjects).some((id) => clicked[id])) return false
+  if (!names(c.solvedLocks).every(solved)) return false
+  if (names(c.notSolvedLocks).some(solved)) return false
   if (c.notebookCountAtLeast > 0 && view.notebookCount < c.notebookCountAtLeast) return false
   if (c.elapsedSecondsAtLeast > 0 && view.elapsedSeconds < c.elapsedSecondsAtLeast) return false
   return true
@@ -255,6 +269,13 @@ export function describeCondition(c, ctx = null) {
   if (all.length) parts.push(`已經${all.map(quote).join('、')}`)
   if (none.length) parts.push(`還沒${none.map(quote).join('、')}`)
   if (any.length) parts.push(`${any.map(quote).join('、')}其中一件已經發生`)
+  const called = (list, ids) => names(ids).map((id) => quote(list?.find((x) => x.id === id)?.name ?? '？')).join('、')
+  if (names(c.visitedScenes).length) parts.push(`去過${called(ctx?.places, c.visitedScenes)}`)
+  if (names(c.notVisitedScenes).length) parts.push(`還沒去過${called(ctx?.places, c.notVisitedScenes)}`)
+  if (names(c.clickedObjects).length) parts.push(`點過${called(ctx?.things, c.clickedObjects)}`)
+  if (names(c.notClickedObjects).length) parts.push(`還沒點過${called(ctx?.things, c.notClickedObjects)}`)
+  if (names(c.solvedLocks).length) parts.push(`解開了${called(ctx?.locks, c.solvedLocks)}`)
+  if (names(c.notSolvedLocks).length) parts.push(`還沒解開${called(ctx?.locks, c.notSolvedLocks)}`)
   if (names(c.objectivesDone).length) parts.push(`已完成目標${names(c.objectivesDone).map((id) => quote(ctx?.objectives?.find((o) => o.id === id)?.text ?? '？')).join('、')}`)
   if (c.elapsedSecondsAtLeast > 0) parts.push(`遊戲開始超過 ${c.elapsedSecondsAtLeast} 秒`)
   return `學生${parts.join('，而且')}`

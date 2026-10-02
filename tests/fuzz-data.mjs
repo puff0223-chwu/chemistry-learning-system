@@ -91,6 +91,12 @@ export function build(seed) {
     if (chance(0.3)) c.objectivesDone = [pick(objectiveIds), '']
     if (chance(0.2)) c.elapsedSecondsAtLeast = pick([0, 1, 999999, -5, 'x'])
     if (chance(0.1)) c.hasItems = ['item1']
+    if (chance(0.25)) c.visitedScenes = [pick(sceneIds), '']
+    if (chance(0.15)) c.notVisitedScenes = [pick(sceneIds)]
+    if (chance(0.25)) c.clickedObjects = [pick(objectIds)]
+    if (chance(0.15)) c.notClickedObjects = [pick(objectIds), null]
+    if (chance(0.25)) c.solvedLocks = [pick([...lockIds, 'ghost_object'])]
+    if (chance(0.15)) c.notSolvedLocks = [pick(lockIds.concat('ghost_object'))]
     return c
   }
   const actionTypes = ['show_message', 'goto_scene', 'reveal_object', 'hide_object', 'swap_background', 'set_flag', 'clear_flag', 'play_sound', 'open_lock', 'delay', 'complete_objective', 'complete_stage', 'add_item', 'remove_item', 'add_notebook', 'set_state', 'not_a_real_action']

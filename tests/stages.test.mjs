@@ -195,6 +195,67 @@ await test('progress survives a refresh, including the stage map and unlocks; ol
   const legacy = new GameEngine({ stage: stage('only'), saved: { sceneId: 'only_s', stageDone: true, flags: {}, missionDone: true } })
   assert.equal(legacy.state.stagesDone.only, true)
 })
+console.log('conditions about places, objects and questions (tracked by the game itself)')
+const { evalCondition, describeCondition, isEmptyCondition } = await import('../src/lib/missionEvents.js')
+await test('evalCondition: visited / clicked / solved, their "not" versions, and blank placeholders', () => {
+  const view = { flags: {}, items: [], objectivesDone: [], visited: { s1: true }, clicked: { o1: true }, locks: { L1: { solved: true }, L2: { solved: false } } }
+  assert.equal(evalCondition({ visitedScenes: ['s1'] }, view), true)
+  assert.equal(evalCondition({ visitedScenes: ['s1', 's2'] }, view), false)
+  assert.equal(evalCondition({ notVisitedScenes: ['s2'] }, view), true)
+  assert.equal(evalCondition({ notVisitedScenes: ['s1'] }, view), false)
+  assert.equal(evalCondition({ clickedObjects: ['o1'] }, view), true)
+  assert.equal(evalCondition({ notClickedObjects: ['o1'] }, view), false)
+  assert.equal(evalCondition({ solvedLocks: ['L1'] }, view), true)
+  assert.equal(evalCondition({ solvedLocks: ['L2'] }, view), false)
+  assert.equal(evalCondition({ notSolvedLocks: ['L2'] }, view), true)
+  assert.equal(evalCondition({ visitedScenes: [''], solvedLocks: [''] }, view), true) // still choosing: ignored
+  assert.equal(isEmptyCondition({ visitedScenes: [''] }), true)
+  assert.equal(isEmptyCondition({ visitedScenes: ['s1'] }), false)
+  // old saved progress has no such fields at all
+  assert.equal(evalCondition({ visitedScenes: ['s1'] }, { flags: {}, items: [], objectivesDone: [] }), false)
+  assert.equal(evalCondition({ notVisitedScenes: ['s1'] }, { flags: {}, items: [], objectivesDone: [] }), true)
+})
+await test('the game notices visits, clicks and solved questions by itself, and a replay with reset forgets them', async () => {
+  const lock = { id: 'a_lock', type: 'lock', name: '鎖', visible: true, x: 0, y: 0, w: 1, h: 1, answerType: 'text', answer: { accepted: ['x'], options: { ignoreCase: true } }, hints: [], giveUp: { enabled: true, afterAttempts: 3 }, onSuccess: [], onGiveUp: [] }
+  const a = stage('a', { resetOnRetry: true, scenes: undefined }, [{ action: 'complete_stage' }])
+  a.scenes = [
+    { ...stage('a').scenes[0], objects: [stage('a').scenes[0].objects[0], lock], exits: { ...exits(), right: 'a_s2' } },
+    { sceneId: 'a_s2', name: '第二間', exits: exits(), exitConditions: {}, onEnter: [], background: null, groups: [], objects: [] },
+  ]
+  const { engine } = await make([a, stage('b')], [link('a', 'b')])
+  assert.equal(engine.check({ visitedScenes: ['a_s'] }), true) // the start scene counts
+  assert.equal(engine.check({ visitedScenes: ['a_s2'] }), false)
+  await engine.tryExit('right')
+  assert.equal(engine.check({ visitedScenes: ['a_s2'] }), true)
+  assert.equal(engine.check({ clickedObjects: ['a_b'] }), false)
+  assert.equal(engine.check({ solvedLocks: ['a_lock'] }), false)
+  await engine.submitLock('a_lock', 'x')
+  assert.equal(engine.check({ solvedLocks: ['a_lock'] }), true)
+  // survives save and resume
+  const resumed = new GameEngine({ mission: engine.mission, saved: JSON.parse(JSON.stringify(engine.serialize())) })
+  assert.equal(resumed.check({ visitedScenes: ['a_s2'], solvedLocks: ['a_lock'] }), true)
+  await engine.enterScene('a_s')
+  await click(engine, 'a_b') // finishes stage a (and clicks the button)
+  assert.equal(engine.check({ clickedObjects: ['a_b'] }), true)
+  await engine.enterStage('a') // replay of a finished stage, reset on
+  assert.equal(engine.check({ clickedObjects: ['a_b'] }), false)
+  assert.equal(engine.check({ solvedLocks: ['a_lock'] }), false)
+  assert.equal(engine.check({ visitedScenes: ['a_s2'] }), false)
+})
+await test('plain-language description names the place / object / question; a condition on a deleted one is a health-check error with a place to go', async () => {
+  const ctx = { places: [{ id: 's1', name: '實驗室' }], things: [{ id: 'o1', name: '抽屜' }], locks: [{ id: 'L1', name: '保險箱' }] }
+  assert.equal(describeCondition({ visitedScenes: ['s1'], clickedObjects: ['o1'], notSolvedLocks: ['L1'] }, ctx), '學生去過「實驗室」，而且點過「抽屜」，而且還沒解開「保險箱」')
+  assert.equal(describeCondition({ visitedScenes: ['gone'] }, ctx), '學生去過「？」')
+  const { checkMission } = await import('../src/lib/missionCheck.js')
+  const st = stage('a', {}, [{ if: { visitedScenes: ['gone'], clickedObjects: ['gone2'], solvedLocks: ['gone3'] }, then: [{ action: 'complete_stage' }], else: [] }])
+  const r = checkMission({ settings: {}, stageLinks: [], stages: [st] }, new Set())
+  assert.ok(r.errors.some((e) => e.includes('已經刪除的地點')))
+  assert.ok(r.errors.some((e) => e.includes('已經刪除的物件')))
+  assert.ok(r.errors.some((e) => e.includes('已經刪除的題目')))
+  const i = r.errors.findIndex((e) => e.includes('已經刪除的地點'))
+  assert.deepEqual(r.errorWhere[i], { stageId: 'a', sceneId: 'a_s', objectId: 'a_b' })
+})
+
 console.log('goals alone can finish a stage')
 const goal = (id, extra = {}) => ({ objectiveId: id, text: id, visibleWhen: null, doneWhen: null, hints: [], onDone: [], hidden: false, ...extra })
 await test('no way to finish set, but goals exist: finishing every non-secret goal ends the stage', async () => {

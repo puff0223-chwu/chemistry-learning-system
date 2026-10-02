@@ -13,7 +13,7 @@ export default function AssetPicker({ assets, type, title, onPick, onClose }) {
           </button>
         </div>
         {list.length === 0 && <p className="text-slate-500 py-8 text-center">素材庫裡還沒有這種素材，請先在左側「素材」區上傳。</p>}
-        <div className="grid grid-cols-3 md:grid-cols-4 gap-3 overflow-y-auto">
+        <div className="grid grid-cols-3 md:grid-cols-4 gap-3 overflow-y-auto auto-rows-max content-start">
           {list.map((a) => (
             <button key={a.id} type="button" onClick={() => onPick(a)} className="border border-slate-200 hover:border-cyan rounded-xl overflow-hidden text-left">
               <div className="aspect-video bg-slate-100 flex items-center justify-center overflow-hidden">

@@ -352,8 +352,8 @@ function ExitsTab({ scene, scenes, ctx, onUpdateScene, onSetExit }) {
 
       {adding ? (
         <div className="border border-cyan rounded-lg p-2 flex flex-col gap-2 bg-cyan/5">
-          <div className="flex items-center gap-2">
-            <select value={dir} onChange={(e) => setNewDir(e.target.value)} aria-label="出口方向" className={`${inputClass} w-28 shrink-0`}>
+          <div className="flex flex-col gap-2">
+            <select value={dir} onChange={(e) => setNewDir(e.target.value)} aria-label="出口方向" className={inputClass}>
               {free.map((d) => (
                 <option key={d.key} value={d.key}>
                   {d.arrow} {d.label}
