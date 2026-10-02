@@ -76,6 +76,7 @@ const ADD_CONDITION = [
   { value: 'has', label: '✅ 學生已經做過某件事' },
   { value: 'not', label: '🚫 學生還沒做過某件事' },
   { value: 'any', label: '🔀 下列其中一件事已經發生' },
+  { value: 'goal', label: '🎯 已完成某個任務目標' },
   { value: 'time', label: '⏱️ 遊戲開始超過幾秒' },
 ]
 
@@ -94,6 +95,7 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
   const all = c.allFlags ?? []
   const none = c.notFlags ?? []
   const any = c.anyFlags ?? []
+  const goals = c.objectivesDone ?? []
   const hasTime = c.elapsedSecondsAtLeast !== undefined
   const replaceAt = (list, i, v) => list.map((x, j) => (j === i ? v : x))
   const removeAt = (list, i) => list.filter((_, j) => j !== i)
@@ -102,10 +104,11 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
     if (kind === 'has') set({ allFlags: [...all, ''] })
     if (kind === 'not') set({ notFlags: [...none, ''] })
     if (kind === 'any') set({ anyFlags: [...any, ''] })
+    if (kind === 'goal') set({ objectivesDone: [...goals, ''] })
     if (kind === 'time') set({ elapsedSecondsAtLeast: 60 })
   }
 
-  const rows = all.length + none.length + (any.length ? 1 : 0) + (hasTime ? 1 : 0)
+  const rows = all.length + none.length + goals.length + (any.length ? 1 : 0) + (hasTime ? 1 : 0)
   return (
     <div className="flex flex-col gap-2 border border-slate-200 rounded-lg p-2 bg-slate-50">
       {rows === 0 && <p className="text-xs text-slate-500">{emptyHint}</p>}
@@ -119,6 +122,11 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
       {none.map((f, i) => (
         <CondRow key={`n${i}`} icon="🚫" label="學生還沒做過" onRemove={() => set({ notFlags: removeAt(none, i) })}>
           <FlagPicker value={f} flags={ctx.flags} onChange={(v) => set({ notFlags: replaceAt(none, i, v) })} />
+        </CondRow>
+      ))}
+      {goals.map((g, i) => (
+        <CondRow key={`g${i}`} icon="🎯" label="已完成任務目標" onRemove={() => set({ objectivesDone: removeAt(goals, i) })}>
+          <ObjectiveSelect objectives={ctx.objectives ?? []} value={g} onChange={(v) => set({ objectivesDone: replaceAt(goals, i, v) })} />
         </CondRow>
       ))}
       {any.length > 0 && (
@@ -160,7 +168,7 @@ export function ConditionEditor({ value, onChange, ctx, emptyHint = '目前沒�
         ))}
       </select>
 
-      {!isEmptyCondition(value) && <p className="text-xs bg-cyan/10 text-navy rounded px-2 py-1">👉 白話：{describeCondition(value)}</p>}
+      {!isEmptyCondition(value) && <p className="text-xs bg-cyan/10 text-navy rounded px-2 py-1">👉 白話：{describeCondition(value, ctx)}</p>}
     </div>
   )
 }
@@ -218,6 +226,22 @@ function ObjectSelect({ objects, groups: wholeGroups = [], value, onChange, self
             </option>
           ))}
         </optgroup>
+      ))}
+    </select>
+  )
+}
+
+// Pick one of the mission's objectives (they belong to stages, so group by stage when there are several).
+function ObjectiveSelect({ objectives, value, onChange }) {
+  const multi = new Set(objectives.map((o) => o.stageTitle)).size > 1
+  return (
+    <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} className={required(value)}>
+      <option value="">（選一個任務目標…）</option>
+      {objectives.map((o) => (
+        <option key={o.id} value={o.id}>
+          {multi ? `${o.stageTitle}：` : ''}
+          {o.text}
+        </option>
       ))}
     </select>
   )
@@ -301,6 +325,13 @@ function ActionParams({ action, onChange, ctx, depth }) {
           <input type="number" min={0} step={0.5} value={(action.ms ?? 0) / 1000} onChange={(e) => set({ ms: Math.max(0, Number(e.target.value)) * 1000 })} className={`${inputClass} w-24`} />
           秒，再做下一件事
         </label>
+      )
+    case 'complete_objective':
+      return (
+        <>
+          <ObjectiveSelect objectives={ctx.objectives ?? []} value={action.objectiveId} onChange={(v) => set({ objectiveId: v })} />
+          {(ctx.objectives ?? []).length === 0 && <p className="text-xs text-amber-700">還沒有任何任務目標。請到上方「🏁 關卡設定」→「🎯 任務目標」新增。</p>}
+        </>
       )
     case 'complete_stage':
       return <p className="text-xs text-slate-500">學生會過關，接著執行「關卡設定」裡「過關後」的事。</p>

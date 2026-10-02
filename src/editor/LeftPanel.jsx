@@ -22,7 +22,7 @@ function SceneThumb({ scene, assets }) {
   )
 }
 
-export default function LeftPanel({ scenes, sceneId, startSceneId, assets, assetMap, onSelectScene, onAddScene, onAddObject, onAddAsset, onUpload, uploadMessage }) {
+export default function LeftPanel({ scenes, sceneId, startSceneId, assets, assetMap, onSelectScene, onSceneMenu, onAddScene, onAddObject, onAddAsset, onUpload, uploadMessage }) {
   const [typeFilter, setTypeFilter] = useState('all')
   const fileInput = useRef(null)
   const list = typeFilter === 'all' ? assets : assets.filter((a) => a.type === typeFilter)
@@ -38,7 +38,13 @@ export default function LeftPanel({ scenes, sceneId, startSceneId, assets, asset
         </div>
         <ul className="overflow-y-auto flex flex-col gap-1">
           {scenes.map((s) => (
-            <li key={s.sceneId}>
+            <li
+              key={s.sceneId}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                onSceneMenu?.(e.clientX, e.clientY, s.sceneId)
+              }}
+            >
               <button
                 type="button"
                 onClick={() => onSelectScene(s.sceneId)}

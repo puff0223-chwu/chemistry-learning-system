@@ -23,6 +23,7 @@ const AdminQuestions = lazy(() => import('./pages/AdminQuestions.jsx'))
 const AdminTags = lazy(() => import('./pages/AdminTags.jsx'))
 const AdminAppearance = lazy(() => import('./pages/AdminAppearance.jsx'))
 const AdminAccount = lazy(() => import('./pages/AdminAccount.jsx'))
+const AdminMissionLogs = lazy(() => import('./pages/AdminMissionLogs.jsx'))
 const AdminTaskLogs = lazy(() => import('./pages/AdminTaskLogs.jsx'))
 const AdminBattleLogs = lazy(() => import('./pages/AdminBattleLogs.jsx'))
 
@@ -52,6 +53,7 @@ function App() {
         <Route path="/admin/tags" element={admin(<AdminTags />)} />
         <Route path="/admin/appearance" element={admin(<AdminAppearance />)} />
         <Route path="/admin/account" element={admin(<AdminAccount />)} />
+        <Route path="/admin/logs/mission" element={admin(<AdminMissionLogs />)} />
         <Route path="/admin/logs/task" element={admin(<AdminTaskLogs />)} />
         <Route path="/admin/logs/battle" element={admin(<AdminBattleLogs />)} />
         <Route path="*" element={<Navigate to="/" replace />} />

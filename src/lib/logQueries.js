@@ -28,13 +28,13 @@ export const EVENT_LABELS = {
 
 export const WINNER_LABELS = { A: '玩家 A', B: '玩家 B', draw: '平手', both_wrong: '雙方答錯', timeout: '時間到' }
 
-function chunk(arr, size) {
+export function chunk(arr, size) {
   const out = []
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
   return out
 }
 
-async function fetchAllRows(build) {
+export async function fetchAllRows(build) {
   const rows = []
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await build().range(from, from + PAGE - 1)
@@ -45,12 +45,12 @@ async function fetchAllRows(build) {
   return rows
 }
 
-async function fetchByChunks(values, build) {
+export async function fetchByChunks(values, build) {
   const results = await Promise.all(chunk(values, IN_CHUNK).map((part) => fetchAllRows(() => build(part))))
   return results.flat()
 }
 
-const escapeLike = (text) => text.trim().replace(/[\\%_]/g, (c) => `\\${c}`)
+export const escapeLike = (text) => text.trim().replace(/[\\%_]/g, (c) => `\\${c}`)
 
 function applySessionFilters(query, filters) {
   let q = query

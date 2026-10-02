@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node tests/engine.test.mjs && node tests/events.test.mjs && node tests/locks.test.mjs && node tests/engine-locks.test.mjs && node tests/groups.test.mjs && node tests/graph-layout.test.mjs"
+    "test": "node tests/engine.test.mjs && node tests/events.test.mjs && node tests/locks.test.mjs && node tests/engine-locks.test.mjs && node tests/groups.test.mjs && node tests/graph-layout.test.mjs && node tests/stages.test.mjs && node tests/mission-stats.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

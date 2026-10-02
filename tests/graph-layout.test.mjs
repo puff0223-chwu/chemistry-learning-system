@@ -1,6 +1,6 @@
 // Run with: npm test   (plain node, no browser or database needed)
 import assert from 'node:assert/strict'
-import { GRID_STEP, autoLayout } from '../src/editor/graphLayout.js'
+import { GRID_STEP, autoLayout, layoutStages } from '../src/editor/graphLayout.js'
 
 let passed = 0
 const test = (name, fn) => {
@@ -58,5 +58,18 @@ test('the top-left scene lands on (0, 0) and every position is a whole number of
 test('exits to scenes that no longer exist are ignored', () => {
   const pos = autoLayout([scene('A', { right: 'GONE' })], 'A', cell)
   assert.deepEqual(Object.keys(pos), ['A'])
+})
+test('stages: a chain runs left to right, parallel stages stack, a merge sits after both', () => {
+  const st = (id) => ({ stageId: id })
+  const links = [{ from: 'a', to: 'b' }, { from: 'a', to: 'c' }, { from: 'b', to: 'd' }, { from: 'c', to: 'd' }]
+  const pos = layoutStages([st('a'), st('b'), st('c'), st('d')], links, { w: 100, h: 100 })
+  assert.ok(pos.a.x < pos.b.x && pos.b.x === pos.c.x && pos.b.y !== pos.c.y && pos.d.x > pos.b.x)
+  assert.equal(pos.a.x, 0)
+})
+
+test('stages: a loop in the connections does not hang, and unconnected stages are still placed', () => {
+  const st = (id) => ({ stageId: id })
+  const pos = layoutStages([st('a'), st('b'), st('z')], [{ from: 'a', to: 'b' }, { from: 'b', to: 'a' }], { w: 100, h: 100 })
+  assert.equal(Object.keys(pos).length, 3)
 })
 console.log(`\n${passed} passed`)

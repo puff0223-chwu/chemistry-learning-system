@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { renameFlag } from '../lib/missionEvents.js'
 import { deleteObjects, duplicateObjects, groupObjects, moveBlock, nextSelection, pruneGroups, regroupForCopy, renameGroup, ungroup } from './groupOps.js'
-import { createObject, createScene, emptyExits, genId, normalizeDraft, withZIndex, OPPOSITE } from '../lib/missionSchema.js'
+import { createObject, createScene, createStage, emptyExits, genId, normalizeDraft, withZIndex, OPPOSITE } from '../lib/missionSchema.js'
 
 const HISTORY_LIMIT = 50 // spec-v5 §6.3: at least 50 undo steps
 const COALESCE_MS = 1000 // consecutive edits of the same thing (dragging, typing) count as one undo step
@@ -9,8 +9,11 @@ const AUTOSAVE_MS = 30000
 const IMPORTANT_SAVE_DELAY_MS = 2000
 
 // Immutable helpers: the draft is only ever replaced, never mutated, so history can keep references.
-const mapStage = (draft, fn) => ({ ...draft, stages: draft.stages.map((s, i) => (i === 0 ? fn(s) : s)) })
-const mapScene = (draft, sceneId, fn) => mapStage(draft, (st) => ({ ...st, scenes: st.scenes.map((sc) => (sc.sceneId === sceneId ? fn(sc) : sc)) }))
+const mapStageById = (draft, stageId, fn) => ({ ...draft, stages: draft.stages.map((s) => (s.stageId === stageId ? fn(s) : s)) })
+const mapScene = (draft, sceneId, fn) => ({
+  ...draft,
+  stages: draft.stages.map((st) => (st.scenes.some((sc) => sc.sceneId === sceneId) ? { ...st, scenes: st.scenes.map((sc) => (sc.sceneId === sceneId ? fn(sc) : sc)) } : st)),
+})
 const mapObjects = (draft, sceneId, fn) => mapScene(draft, sceneId, (sc) => pruneGroups({ ...sc, objects: withZIndex(fn(sc.objects)) }))
 // Applies a whole-scene change (from groupOps) and keeps zIndex and the group list consistent.
 const mapSceneObjects = (draft, sceneId, fn) => mapScene(draft, sceneId, (sc) => {
@@ -18,8 +21,27 @@ const mapSceneObjects = (draft, sceneId, fn) => mapScene(draft, sceneId, (sc) =>
   return pruneGroups({ ...next, objects: withZIndex(next.objects) })
 })
 
-export const getStage = (draft) => draft.stages[0]
-export const getScene = (draft, sceneId) => draft.stages[0].scenes.find((s) => s.sceneId === sceneId) ?? null
+export const getStage = (draft, stageId) => draft.stages.find((s) => s.stageId === stageId) ?? draft.stages[0]
+export const getScene = (draft, sceneId) => draft.stages.flatMap((s) => s.scenes).find((sc) => sc.sceneId === sceneId) ?? null
+
+// Gives a copy of a stage new ids everywhere (stage, scenes, objects, groups, objectives), including every place an
+// event or exit refers to one of them, so the copy never reaches into the original.
+function cloneStage(stage) {
+  const map = new Map([[stage.stageId, genId('st')]])
+  for (const sc of stage.scenes) {
+    map.set(sc.sceneId, genId('sc'))
+    for (const g of sc.groups ?? []) map.set(g.id, genId('gr'))
+    for (const o of sc.objects) map.set(o.id, genId('ob'))
+  }
+  for (const ob of stage.objectives ?? []) map.set(ob.objectiveId, genId('og'))
+  const walk = (node) => {
+    if (typeof node === 'string') return map.get(node) ?? node
+    if (Array.isArray(node)) return node.map(walk)
+    if (node && typeof node === 'object') return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, walk(v)]))
+    return node
+  }
+  return walk(structuredClone(stage))
+}
 
 function readBackup(storageKey) {
   try {
@@ -35,9 +57,17 @@ function readBackup(storageKey) {
 export default function useMissionEditor({ initialDraft, save, storageKey }) {
   const [draft, setDraft] = useState(() => normalizeDraft(initialDraft))
   const draftRef = useRef(draft)
-  const [selectedSceneId, setSceneId] = useState(() => getStage(draft).startSceneId)
-  // Falls back to the start scene if the selected one vanished (restore, import, undo), so the canvas never goes blank.
-  const scene = getScene(draft, selectedSceneId) ?? getScene(draft, getStage(draft).startSceneId) ?? getStage(draft).scenes[0] ?? null
+  const [selectedStageId, setStageId] = useState(() => draft.stages[0].stageId)
+  const stage = getStage(draft, selectedStageId)
+  const stageIdRef = useRef(stage.stageId)
+  useEffect(() => {
+    stageIdRef.current = stage.stageId
+  }, [stage.stageId])
+  // Everything below that edits "the stage" edits the selected one.
+  const mapStage = (d, fn) => mapStageById(d, stageIdRef.current, fn)
+  const [selectedSceneId, setSceneId] = useState(() => draft.stages[0].startSceneId)
+  // Falls back to the stage's start scene if the selected one vanished (restore, import, undo, another stage).
+  const scene = stage.scenes.find((s) => s.sceneId === selectedSceneId) ?? stage.scenes.find((s) => s.sceneId === stage.startSceneId) ?? stage.scenes[0] ?? null
   const sceneId = scene?.sceneId ?? null
   const [objectIds, setObjectIds] = useState([]) // selected objects (a group counts as all its members)
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false })
@@ -134,8 +164,10 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
     (snapshot) => {
       draftRef.current = snapshot
       setDraft(snapshot)
-      const scenes = getStage(snapshot).scenes
-      setSceneId((id) => (scenes.some((s) => s.sceneId === id) ? id : (getStage(snapshot).startSceneId ?? scenes[0]?.sceneId ?? null)))
+      const st = getStage(snapshot, stageIdRef.current)
+      setStageId(st.stageId)
+      const scenes = st.scenes
+      setSceneId((id) => (scenes.some((s) => s.sceneId === id) ? id : (st.startSceneId ?? scenes[0]?.sceneId ?? null)))
       setObjectIds((ids) => ids.filter((id) => scenes.some((s) => s.objects.some((o) => o.id === id))))
       setStatus(snapshot === savedRef.current ? 'saved' : 'dirty')
       lastEdit.current = { key: null, time: 0 }
@@ -189,7 +221,7 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
 
     addScene: () => {
       const d = draftRef.current
-      const scenes = getStage(d).scenes
+      const scenes = getStage(d, stageIdRef.current).scenes
       const scene = createScene(`場景 ${scenes.length + 1}`, { x: (scenes.length % 4) * 260, y: Math.floor(scenes.length / 4) * 200 })
       commit(
         mapStage(d, (st) => ({ ...st, scenes: [...st.scenes, scene], startSceneId: st.startSceneId ?? scene.sceneId })),
@@ -216,9 +248,9 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
     },
     deleteScene: (id) => {
       const d = draftRef.current
-      const stage = getStage(d)
-      if (stage.scenes.length <= 1) return
-      const remaining = stage.scenes.filter((s) => s.sceneId !== id)
+      const cur = getStage(d, stageIdRef.current)
+      if (cur.scenes.length <= 1) return
+      const remaining = cur.scenes.filter((s) => s.sceneId !== id)
       const next = mapStage(d, (st) => ({
         ...st,
         scenes: remaining.map((sc) => ({
@@ -295,13 +327,73 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
     ungroup: (groupId) => commit(mapSceneObjects(draftRef.current, sceneId, (sc) => ungroup(sc, groupId)), { important: true }),
     renameGroup: (groupId, name) => commit(mapSceneObjects(draftRef.current, sceneId, (sc) => renameGroup(sc, groupId, name)), { key: `group-name-${groupId}` }),
 
+    // ---- stages and the stage map ----
+    selectStage: (id) => {
+      const st = getStage(draftRef.current, id)
+      setStageId(st.stageId)
+      setSceneId(st.startSceneId)
+      setObjectIds([])
+    },
+    // A new stage; when the stage you are on leads nowhere yet, it is connected to the new one (a simple chain by default).
+    addStage: () => {
+      const d = draftRef.current
+      const n = d.stages.length + 1
+      const fresh = createStage(`第 ${n} 關`)
+      const sc = createScene('場景 1')
+      fresh.scenes = [sc]
+      fresh.startSceneId = sc.sceneId
+      fresh.graphPos = { x: Math.max(...d.stages.map((s) => s.graphPos?.x ?? 0)) + 300, y: 0 }
+      const cur = stageIdRef.current
+      const leadsSomewhere = (d.stageLinks ?? []).some((l) => l.from === cur)
+      const links = leadsSomewhere ? d.stageLinks : [...(d.stageLinks ?? []), { id: genId('lk'), from: cur, to: fresh.stageId }]
+      commit({ ...d, stages: [...d.stages, fresh], stageLinks: links }, { important: true })
+      setStageId(fresh.stageId)
+      setSceneId(sc.sceneId)
+      setObjectIds([])
+    },
+    duplicateStage: (id) => {
+      const d = draftRef.current
+      const src = d.stages.find((s) => s.stageId === id)
+      if (!src) return
+      const copy = cloneStage(src)
+      copy.title = `${src.title}（副本）`
+      copy.graphPos = { x: (src.graphPos?.x ?? 0) + 40, y: (src.graphPos?.y ?? 0) + 160 }
+      commit({ ...d, stages: [...d.stages, copy] }, { important: true })
+      setStageId(copy.stageId)
+      setSceneId(copy.startSceneId)
+      setObjectIds([])
+    },
+    deleteStage: (id) => {
+      const d = draftRef.current
+      if (d.stages.length <= 1) return
+      const stages = d.stages.filter((s) => s.stageId !== id)
+      commit({ ...d, stages, stageLinks: (d.stageLinks ?? []).filter((l) => l.from !== id && l.to !== id) }, { important: true })
+      if (stageIdRef.current === id) {
+        setStageId(stages[0].stageId)
+        setSceneId(stages[0].startSceneId)
+        setObjectIds([])
+      }
+    },
+    setStageGraphPos: (id, pos) => commit(mapStageById(draftRef.current, id, (st) => ({ ...st, graphPos: pos })), { key: `stagepos-${id}` }),
+    setStagePositions: (positions) => commit({ ...draftRef.current, stages: draftRef.current.stages.map((st) => (positions[st.stageId] ? { ...st, graphPos: positions[st.stageId] } : st)) }, { important: true }),
+    updateStageById: (id, patch, opts) => commit(mapStageById(draftRef.current, id, (st) => ({ ...st, ...patch })), opts),
+    addLink: (from, to) => {
+      const d = draftRef.current
+      if (from === to || (d.stageLinks ?? []).some((l) => l.from === from && l.to === to)) return
+      commit({ ...d, stageLinks: [...(d.stageLinks ?? []), { id: genId('lk'), from, to }] }, { important: true })
+    },
+    updateLink: (id, patch, opts) => commit({ ...draftRef.current, stageLinks: draftRef.current.stageLinks.map((l) => (l.id === id ? { ...l, ...patch } : l)) }, opts),
+    removeLink: (id) => commit({ ...draftRef.current, stageLinks: draftRef.current.stageLinks.filter((l) => l.id !== id) }, { important: true }),
+    updateSettings: (patch) => commit({ ...draftRef.current, settings: { ...draftRef.current.settings, ...patch } }, { important: true }),
+
     // Renames a progress marker everywhere it is remembered or checked.
     renameFlag: (from, to) => commit(renameFlag(draftRef.current, from, to), { important: true }),
 
     replaceDraft: (raw) => {
       const next = normalizeDraft(raw)
       commit(next, { important: true })
-      const first = getStage(next)
+      const first = getStage(next, null)
+      setStageId(first.stageId)
       setSceneId(first.startSceneId)
       setObjectIds([])
     },
@@ -317,7 +409,8 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
     applyBackup: (backup) => {
       const next = normalizeDraft(backup.draft)
       commit(next, { important: true })
-      setSceneId(getStage(next).startSceneId)
+      setStageId(getStage(next, null).stageId)
+      setSceneId(getStage(next, null).startSceneId)
       setObjectIds([])
     },
     discardBackup: () => {
@@ -333,5 +426,5 @@ export default function useMissionEditor({ initialDraft, save, storageKey }) {
   const object = selectedIds.length === 1 ? scene.objects.find((o) => o.id === selectedIds[0]) : null
   const objectId = object?.id ?? null
 
-  return { draft, scene, object, sceneId, objectId, objectIds: selectedIds, status, savedAt, saveError, ...historyState, actions }
+  return { draft, stage, stageId: stage.stageId, scene, object, sceneId, objectId, objectIds: selectedIds, status, savedAt, saveError, ...historyState, actions }
 }

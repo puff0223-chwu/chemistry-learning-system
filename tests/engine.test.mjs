@@ -121,7 +121,7 @@ await test('complete_stage runs onComplete then mission done, once', async () =>
 await test('completeWhen finishes the stage automatically', async () => {
   const { engine } = make({ completeWhen: { allFlags: ['hasKey'] } })
   await engine.start()
-  assert.equal(engine.state.stageDone, false)
+  assert.equal(!!engine.state.stagesDone.st1, false)
   await engine.clickObject(engine.objects.get('key').object)
   assert.equal(engine.state.missionDone, true)
 })

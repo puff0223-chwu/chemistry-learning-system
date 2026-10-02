@@ -56,6 +56,9 @@ export default function AdminNav({ active }) {
       </NavLink>
 
       <Group>📊 學習資料</Group>
+      <NavLink to="/admin/logs/mission" active={active} current="mission-logs">
+        任務紀錄
+      </NavLink>
       <NavLink to="/admin/logs/task" active={active} current="task-logs">
         任務關卡資料（舊版）
       </NavLink>

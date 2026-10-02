@@ -123,7 +123,7 @@ export default function MissionPlay() {
       }
     }
     engine = new GameEngine({
-      stage: data.stages[0],
+      mission: data,
       saved: resume?.state ?? null,
       onLog: (type, extra) => {
         recorder.log(type, extra)

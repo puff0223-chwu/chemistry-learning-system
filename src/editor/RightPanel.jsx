@@ -2,7 +2,7 @@ import { useState } from 'react'
 import RichTextEditor from '../components/RichTextEditor.jsx'
 import { DIRECTIONS, OBJECT_TYPE_LABELS, parseYouTubeId } from '../lib/missionSchema.js'
 import AssetPicker from './AssetPicker.jsx'
-import { EventEditor } from './EventEditor.jsx'
+import { ConditionEditor, EventEditor } from './EventEditor.jsx'
 import LayersPanel, { SelectionPanel, interactionBadges } from './LayersPanel.jsx'
 import LockProperties from './LockEditor.jsx'
 import VisibilityBlock from './VisibilityBlock.jsx'
@@ -195,7 +195,7 @@ function GroupNote({ group, object, onUpdate, onSelectGroup }) {
   )
 }
 
-function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPickIcon, onPreviewLock, onSelectGroup }) {
+function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPickIcon, onPreviewLock, onWizardLock, onSelectGroup }) {
   const [tab, setTab] = useState(object.type === 'hotspot' ? 'interact' : 'look')
   if (object.type === 'lock') {
     return (
@@ -207,6 +207,7 @@ function ObjectProperties({ object, group, assets, assetMap, ctx, onUpdate, onPi
         onChange={(patch, opts) => onUpdate(object.id, patch, opts)}
         onPickIcon={() => onPickIcon(object.id)}
         onPreview={() => onPreviewLock(object.id)}
+        onWizard={() => onWizardLock(object.id)}
       />
     )
   }
@@ -291,10 +292,23 @@ function SceneTab({ scene, scenes, assetMap, assets, isStart, onUpdateScene, onS
 }
 
 function ExitsTab({ scene, scenes, ctx, onUpdateScene, onSetExit }) {
+  // Only the exits that exist are listed; a new one is added with the button, so the panel stays short.
+  const [adding, setAdding] = useState(false)
+  const [newDir, setNewDir] = useState('')
+  const others = scenes.filter((s) => s.sceneId !== scene.sceneId)
+  const used = DIRECTIONS.filter((d) => scene.exits[d.key])
+  const free = DIRECTIONS.filter((d) => !scene.exits[d.key])
+  const dir = free.some((d) => d.key === newDir) ? newDir : (free[0]?.key ?? '')
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-slate-500">學生會在畫面邊緣看到有出口的方向按鈕。也可以到上方「🗺️ 場景關聯圖」直接拖線建立。</p>
-      {DIRECTIONS.map((d) => {
+      {used.length === 0 && !adding && (
+        <p className="text-sm text-slate-500 bg-slate-50 rounded-lg p-3">
+          這個場景還沒有出口，學生走不出去。按下面「＋ 新增出口」，選一個方向和要通往的場景。
+          {others.length === 0 && <span className="block text-amber-700 mt-1">還沒有別的場景，請先到左邊「＋ 新增」建立。</span>}
+        </p>
+      )}
+      {used.map((d) => {
         const target = scene.exits[d.key]
         const rule = scene.exitConditions?.[d.key] ?? {}
         const hasRule = !!(rule.when || rule.message)
@@ -312,31 +326,70 @@ function ExitsTab({ scene, scenes, ctx, onUpdateScene, onSetExit }) {
                 {d.arrow} {d.label}
               </span>
               <select value={target ?? ''} onChange={(e) => onSetExit(scene.sceneId, d.key, e.target.value || null)} className={inputClass}>
-                <option value="">（這個方向沒有出口）</option>
-                {scenes
-                  .filter((s) => s.sceneId !== scene.sceneId)
-                  .map((s) => (
-                    <option key={s.sceneId} value={s.sceneId}>
-                      通往：{s.name}
-                    </option>
-                  ))}
+                {others.map((s) => (
+                  <option key={s.sceneId} value={s.sceneId}>
+                    通往：{s.name}
+                  </option>
+                ))}
               </select>
+              <button type="button" title="拿掉這個出口" aria-label={`拿掉往${d.label}的出口`} onClick={() => onSetExit(scene.sceneId, d.key, null)} className="px-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded">
+                ✕
+              </button>
             </div>
-            {target && (
-              <details open={hasRule} className="text-sm">
-                <summary className="cursor-pointer text-slate-600 hover:text-navy">{hasRule ? '🔒 有通行條件（點開修改）' : '🔓 隨時可以走（要設條件才能走？點這裡）'}</summary>
-                <div className="flex flex-col gap-2 mt-2">
-                  <p className="text-xs text-slate-500">例如「學生已經做過：戴上護目鏡」才能進入。</p>
-                  <ConditionEditor value={rule.when ?? null} onChange={(v) => setRule({ when: v })} ctx={ctx} emptyHint="沒有條件＝隨時可以走。" />
-                  <Field label="條件還沒達成時，學生按了會看到這句話：">
-                    <input value={rule.message ?? ''} onChange={(e) => setRule({ message: e.target.value })} placeholder="例如：先戴上護目鏡才能靠近抽氣櫃" className={inputClass} />
-                  </Field>
-                </div>
-              </details>
-            )}
+            <details open={hasRule} className="text-sm">
+              <summary className="cursor-pointer text-slate-600 hover:text-navy">{hasRule ? '🔒 有通行條件（點開修改）' : '🔓 隨時可以走（要設條件才能走？點這裡）'}</summary>
+              <div className="flex flex-col gap-2 mt-2">
+                <p className="text-xs text-slate-500">例如「學生已經做過：戴上護目鏡」才能進入。</p>
+                <ConditionEditor value={rule.when ?? null} onChange={(v) => setRule({ when: v })} ctx={ctx} emptyHint="沒有條件＝隨時可以走。" />
+                <Field label="條件還沒達成時，學生按了會看到這句話：">
+                  <input value={rule.message ?? ''} onChange={(e) => setRule({ message: e.target.value })} placeholder="例如：先戴上護目鏡才能靠近抽氣櫃" className={inputClass} />
+                </Field>
+              </div>
+            </details>
           </div>
         )
       })}
+
+      {adding ? (
+        <div className="border border-cyan rounded-lg p-2 flex flex-col gap-2 bg-cyan/5">
+          <div className="flex items-center gap-2">
+            <select value={dir} onChange={(e) => setNewDir(e.target.value)} aria-label="出口方向" className={`${inputClass} w-28 shrink-0`}>
+              {free.map((d) => (
+                <option key={d.key} value={d.key}>
+                  {d.arrow} {d.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value=""
+              onChange={(e) => {
+                if (!e.target.value || !dir) return
+                onSetExit(scene.sceneId, dir, e.target.value)
+                setAdding(false)
+              }}
+              aria-label="通往哪個場景"
+              className={inputClass}
+            >
+              <option value="">（選要通往的場景…）</option>
+              {others.map((s) => (
+                <option key={s.sceneId} value={s.sceneId}>
+                  通往：{s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button type="button" onClick={() => setAdding(false)} className="self-start text-xs text-slate-500 hover:text-navy underline">
+            取消
+          </button>
+        </div>
+      ) : (
+        free.length > 0 &&
+        others.length > 0 && (
+          <button type="button" onClick={() => setAdding(true)} className="self-start text-sm bg-slate-100 hover:bg-slate-200 rounded-lg px-3 py-1.5 font-bold">
+            ＋ 新增出口
+          </button>
+        )
+      )}
     </div>
   )
 }
@@ -384,7 +437,7 @@ export default function RightPanel({ scene, scenes, stage, object, objectIds, as
         {objectIds.length > 1 ? (
           <SelectionPanel scene={scene} selectedIds={objectIds} actions={actions} />
         ) : object ? (
-          <ObjectProperties key={object.id} object={object} group={group} onSelectGroup={() => actions.selectObject(object.id)} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} onPickIcon={onPickIcon} onPreviewLock={onPreviewLock} />
+          <ObjectProperties key={object.id} object={object} group={group} onSelectGroup={() => actions.selectObject(object.id)} assets={assets} assetMap={assetMap} ctx={ctx} onUpdate={actions.updateObject} onPickIcon={onPickIcon} onPreviewLock={onPreviewLock} onWizardLock={actions.openWizard} />
         ) : (
           <SceneProperties
             key={scene.sceneId}

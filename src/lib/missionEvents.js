@@ -18,6 +18,7 @@ export const ACTION_META = [
   { type: 'play_sound', icon: '🔊', label: '播放音效', desc: '播放素材庫裡的音訊', category: 'flow' },
   { type: 'open_lock', icon: '🔐', label: '出一道題目', desc: '讓學生回答某個答案鎖（題目）', category: 'lock' },
   { type: 'delay', icon: '⏱️', label: '等一下', desc: '停幾秒再做下一件事', category: 'flow' },
+  { type: 'complete_objective', icon: '🎯', label: '完成任務目標', desc: '讓某個任務目標變成「已完成」', category: 'goal' },
   { type: 'complete_stage', icon: '🏁', label: '讓學生過關', desc: '學生完成這一關', category: 'goal' },
 ]
 export const ACTION_TYPES = ACTION_META.map(({ type, label }) => ({ type, label }))
@@ -54,6 +55,8 @@ export function newAction(type) {
       return { action: type, assetId: null }
     case 'open_lock':
       return { action: type, target: null }
+    case 'complete_objective':
+      return { action: type, objectiveId: null }
     case 'delay':
       return { action: type, ms: 1000 }
     case 'if':
@@ -76,7 +79,7 @@ export function isEmptyCondition(c) {
   return (
     FLAG_KEYS.every((k) => names(c[k]).length === 0) &&
     !(c.hasItems?.length > 0) &&
-    !(c.objectivesDone?.length > 0) &&
+    names(c.objectivesDone).length === 0 &&
     !(c.notebookCountAtLeast > 0) &&
     !(c.elapsedSecondsAtLeast > 0)
   )
@@ -94,7 +97,8 @@ export function evalCondition(c, view) {
   if (any.length && !any.some(has)) return false
   if (none.length && none.some(has)) return false
   if (c.hasItems?.length && !c.hasItems.every((id) => view.items.includes(id))) return false
-  if (c.objectivesDone?.length && !c.objectivesDone.every((id) => view.objectivesDone.includes(id))) return false
+  const goals = names(c.objectivesDone)
+  if (goals.length && !goals.every((id) => view.objectivesDone.includes(id))) return false
   if (c.notebookCountAtLeast > 0 && view.notebookCount < c.notebookCountAtLeast) return false
   if (c.elapsedSecondsAtLeast > 0 && view.elapsedSeconds < c.elapsedSecondsAtLeast) return false
   return true
@@ -128,26 +132,41 @@ function branchConditions(list, into = []) {
 // progress-marker manager and the stage dialog, so they can never disagree about where events live.
 export function listSources(data) {
   const out = []
-  const stage = data.stages[0]
-  const addActions = (label, list) => {
-    if (list?.length) out.push({ label, actions: list, conditions: branchConditions(list) })
+  const multi = data.stages.length > 1
+  let current = null
+  const pre = () => (multi ? `關卡「${current.title}」・` : '')
+  // `where` tells the editor where to jump to when a problem is found here: { dialog, sceneId, objectId, view }
+  const addActions = (label, list, where = {}) => {
+    if (list?.length) out.push({ label: pre() + label, stageId: current?.stageId, where: { stageId: current?.stageId, ...where }, actions: list, conditions: branchConditions(list) })
   }
-  const addCondition = (label, cond) => {
-    if (cond) out.push({ label, actions: [], conditions: [cond] })
+  const addCondition = (label, cond, where = {}) => {
+    if (cond) out.push({ label: pre() + label, stageId: current?.stageId, where: { stageId: current?.stageId, ...where }, actions: [], conditions: [cond] })
   }
-  addCondition('關卡的「自動過關條件」', stage.completeWhen)
-  addActions('關卡「過關後」', stage.onComplete)
+  for (const link of data.stageLinks ?? []) {
+    const name = (id) => data.stages.find((s) => s.stageId === id)?.title ?? '？'
+    if (link.when) out.push({ label: `關卡連線「${name(link.from)} → ${name(link.to)}」的條件`, stageId: link.from, where: { view: 'stages' }, actions: [], conditions: [link.when] })
+  }
+  for (const stage of data.stages) {
+  current = stage
+  addCondition('關卡的「自動過關條件」', stage.completeWhen, { dialog: 'flow' })
+  addActions('關卡「過關後」', stage.onComplete, { dialog: 'flow' })
+  for (const obj of stage.objectives ?? []) {
+    addCondition(`目標「${obj.text}」的出現條件`, obj.visibleWhen, { dialog: 'goals' })
+    addCondition(`目標「${obj.text}」的完成條件`, obj.doneWhen, { dialog: 'goals' })
+    addActions(`目標「${obj.text}」完成時`, obj.onDone, { dialog: 'goals' })
+  }
   for (const scene of stage.scenes) {
-    addActions(`場景「${scene.name}」進入時`, scene.onEnter)
-    for (const [dir, rule] of Object.entries(scene.exitConditions ?? {})) addCondition(`場景「${scene.name}」的出口條件（${dir}）`, rule?.when)
+    addActions(`場景「${scene.name}」進入時`, scene.onEnter, { sceneId: scene.sceneId })
+    for (const [dir, rule] of Object.entries(scene.exitConditions ?? {})) addCondition(`場景「${scene.name}」的出口條件（${dir}）`, rule?.when, { sceneId: scene.sceneId })
     for (const o of scene.objects) {
-      addActions(`場景「${scene.name}」的「${o.name}」被點擊時`, o.onClick)
-      addCondition(`場景「${scene.name}」的「${o.name}」的出現條件`, o.showWhen)
+      addActions(`場景「${scene.name}」的「${o.name}」被點擊時`, o.onClick, { sceneId: scene.sceneId, objectId: o.id })
+      addCondition(`場景「${scene.name}」的「${o.name}」的出現條件`, o.showWhen, { sceneId: scene.sceneId, objectId: o.id })
       if (o.type === 'lock') {
-        addActions(`場景「${scene.name}」的答案鎖「${o.name}」答對時`, o.onSuccess)
-        addActions(`場景「${scene.name}」的答案鎖「${o.name}」按「我真的不會」時`, o.onGiveUp)
+        addActions(`場景「${scene.name}」的答案鎖「${o.name}」答對時`, o.onSuccess, { sceneId: scene.sceneId, objectId: o.id })
+        addActions(`場景「${scene.name}」的答案鎖「${o.name}」按「我真的不會」時`, o.onGiveUp, { sceneId: scene.sceneId, objectId: o.id })
       }
     }
+  }
   }
   return out
 }
@@ -194,10 +213,11 @@ export function renameFlag(data, from, to) {
   return copy
 }
 
-// Places where the stage can currently be completed by an event ("完成本關").
-export function completionSources(data) {
+// Places where a stage can currently be completed by an event ("完成本關"). `stageId` limits it to one stage.
+export function completionSources(data, stageId = null) {
   const found = []
   for (const source of listSources(data)) {
+    if (stageId && source.stageId !== stageId) continue
     let has = false
     walkActions(source.actions, (a) => {
       if (a.action === 'complete_stage') has = true
@@ -205,6 +225,14 @@ export function completionSources(data) {
     if (has) found.push(source.label)
   }
   return found
+}
+
+// A stage the teacher gave goals but no way to finish ends by itself once every (non-secret) goal is done.
+// It only applies when nothing else can finish the stage: no auto-finish rule and no "finish the stage" step.
+export function usesGoalCompletion(data, stage) {
+  if (stage.completeWhen) return false
+  if (!(stage.objectives ?? []).some((o) => !o.hidden)) return false
+  return completionSources(data, stage.stageId).length === 0
 }
 
 export function usesElapsedTime(data) {
@@ -217,7 +245,7 @@ const quote = (t) => `「${t}」`
 const clip = (t, n = 14) => (t.length > n ? `${t.slice(0, n)}…` : t)
 
 // "學生已經 拿到鑰匙，而且 還沒 打開門" — shown under every condition so the teacher can check their own meaning.
-export function describeCondition(c) {
+export function describeCondition(c, ctx = null) {
   if (isEmptyCondition(c)) return '沒有任何限制'
   const parts = []
   const all = names(c.allFlags)
@@ -226,6 +254,7 @@ export function describeCondition(c) {
   if (all.length) parts.push(`已經${all.map(quote).join('、')}`)
   if (none.length) parts.push(`還沒${none.map(quote).join('、')}`)
   if (any.length) parts.push(`${any.map(quote).join('、')}其中一件已經發生`)
+  if (names(c.objectivesDone).length) parts.push(`已完成目標${names(c.objectivesDone).map((id) => quote(ctx?.objectives?.find((o) => o.id === id)?.text ?? '？')).join('、')}`)
   if (c.elapsedSecondsAtLeast > 0) parts.push(`遊戲開始超過 ${c.elapsedSecondsAtLeast} 秒`)
   return `學生${parts.join('，而且')}`
 }
@@ -254,6 +283,8 @@ export function describeAction(a, ctx) {
       return '播放音效'
     case 'open_lock':
       return `出題「${object(a.target)}」`
+    case 'complete_objective':
+      return `完成目標${quote(ctx.objectives?.find((o) => o.id === a.objectiveId)?.text ?? '？')}`
     case 'delay':
       return `等 ${(a.ms ?? 0) / 1000} 秒`
     case 'complete_stage':

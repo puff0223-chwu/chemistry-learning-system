@@ -41,7 +41,7 @@ function snap(box, others) {
 // A transparent Konva layer on top handles selecting (click, Shift+click, drag a box), dragging and
 // resizing/rotating (mouse and touch alike). With several objects selected, one invisible box around them
 // is resized/rotated and every member follows (see groupOps.transformMembers).
-export default function SceneCanvas({ scene, assets, selectedIds, zoom, onSelect, onSelectMany, onChange, onChangeMany, onDropAsset }) {
+export default function SceneCanvas({ scene, assets, selectedIds, zoom, onSelect, onSelectMany, onChange, onChangeMany, onDropAsset, onContextMenu }) {
   const shapeRefs = useRef({})
   const proxyRef = useRef(null)
   const transformerRef = useRef(null)
@@ -84,6 +84,7 @@ export default function SceneCanvas({ scene, assets, selectedIds, zoom, onSelect
 
   function handleStagePress(e) {
     if (e.target !== e.target.getStage()) return
+    if (e.evt.button === 2) return // right button opens the menu, it does not start a selection box
     const p = pointer(e)
     setMarquee({ x0: p.x, y0: p.y, x1: p.x, y1: p.y, additive: e.evt.shiftKey })
   }
@@ -175,6 +176,13 @@ export default function SceneCanvas({ scene, assets, selectedIds, zoom, onSelect
     setFrozenBox(null)
   }
 
+  // Right-click: on an object = that object's menu, on empty canvas = the "add here" menu.
+  function handleContext(e) {
+    e.evt.preventDefault()
+    const stage = e.target.getStage()
+    onContextMenu?.({ clientX: e.evt.clientX, clientY: e.evt.clientY, objectId: e.target === stage ? null : e.target.id() || null, point: pointer(e) })
+  }
+
   function handleDrop(e) {
     const assetId = e.dataTransfer.getData('application/x-asset-id')
     if (!assetId) return
@@ -197,11 +205,12 @@ export default function SceneCanvas({ scene, assets, selectedIds, zoom, onSelect
       <div style={{ transform: `scale(${zoom})`, transformOrigin: '0 0', width: CANVAS_W, height: CANVAS_H }}>
         <SceneView scene={scene} assets={assets} editor />
       </div>
-      <Stage width={width} height={height} scaleX={zoom} scaleY={zoom} className="absolute inset-0" onMouseDown={handleStagePress} onTouchStart={handleStagePress} onMouseMove={handleStageMove} onTouchMove={handleStageMove} onMouseUp={handleStageRelease} onTouchEnd={handleStageRelease}>
+      <Stage width={width} height={height} scaleX={zoom} scaleY={zoom} className="absolute inset-0" onMouseDown={handleStagePress} onTouchStart={handleStagePress} onMouseMove={handleStageMove} onTouchMove={handleStageMove} onMouseUp={handleStageRelease} onTouchEnd={handleStageRelease} onContextMenu={handleContext}>
         <Layer>
           {scene.objects.map((o) => (
             <Rect
               key={o.id}
+              id={o.id}
               ref={(node) => {
                 if (node) shapeRefs.current[o.id] = node
                 else delete shapeRefs.current[o.id]

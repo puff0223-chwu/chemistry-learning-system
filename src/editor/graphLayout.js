@@ -57,3 +57,30 @@ export function autoLayout(scenes, startSceneId, cell = { w: 280, h: 200 }) {
   const minY = Math.min(...[...place.values()].map(([, gy]) => gy))
   return Object.fromEntries([...place].map(([id, [gx, gy]]) => [id, { x: (gx - minX) * cell.w, y: (gy - minY) * cell.h }]))
 }
+
+// Stage map placement: stages go left to right by "how many connections away from a starting stage" (the longest
+// chain wins, so a merge sits after everything that leads into it); stages in the same column stack downwards.
+// stages: [{ stageId }], links: [{ from, to }]  ->  { stageId: { x, y } }
+export function layoutStages(stages, links, cell = { w: 300, h: 170 }) {
+  const ids = stages.map((s) => s.stageId)
+  const valid = links.filter((l) => ids.includes(l.from) && ids.includes(l.to) && l.from !== l.to)
+  const depth = Object.fromEntries(ids.map((id) => [id, 0]))
+  // relax repeatedly; stopping after |stages| rounds also keeps accidental loops from running away
+  for (let round = 0; round < ids.length; round++) {
+    let changed = false
+    for (const l of valid) {
+      if (depth[l.to] < depth[l.from] + 1 && depth[l.from] + 1 < ids.length) {
+        depth[l.to] = depth[l.from] + 1
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+  const rowOf = {}
+  const out = {}
+  for (const id of ids) {
+    rowOf[depth[id]] = (rowOf[depth[id]] ?? -1) + 1
+    out[id] = { x: depth[id] * cell.w, y: rowOf[depth[id]] * cell.h }
+  }
+  return out
+}
